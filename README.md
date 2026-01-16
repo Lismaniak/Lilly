@@ -1,6 +1,6 @@
 # Lilly Framework – Architecture & Conventions
 
-This document describes the **enforced folder structure**, **component model**, and **DTO conventions** used in Lilly.
+This document describes the **enforced folder structure**, **component model**, **repository usage**, and **DTO conventions** used in Lilly.
 
 The goal of Lilly is **architectural uniformity**:
 
@@ -31,6 +31,7 @@ Each domain is a **bounded context** and contains everything related to that dom
 ```
 Domain/<DomainName>/
   Models/
+  Repositories/
   Migrations/
   Policies/
   Validators/
@@ -45,7 +46,9 @@ Domain/<DomainName>/
 * A domain **owns its data, rules, and permissions**
 * Domain code may NOT depend on UI
 * UI components may depend on domain services
+* Services may depend on repositories
 * Domain policies are always enforced before domain code executes
+* Services are the **only place** where repositories are used
 
 ---
 
@@ -60,8 +63,10 @@ Domain/Users/Models/
 
 * `User.php`
 
-  * Active Record style model
-  * No business workflows
+  * Domain model
+  * Represents business state
+  * No workflows
+  * No persistence logic
   * Small helper behavior only
 
 * `UserFields.php`
@@ -73,6 +78,45 @@ Domain/Users/Models/
 * `UserRelations.php`
 
   * Domain relations (hasMany, belongsTo, etc.)
+
+---
+
+## Repositories (Persistence boundary)
+
+```
+Domain/Users/Repositories/
+  UserRepository.php
+```
+
+Repositories define **how domain data is persisted and queried**.
+
+### Repository rules
+
+* Repositories encapsulate **all persistence logic**
+* Services MUST NOT:
+
+  * write SQL
+  * use query builders directly
+  * talk to the database
+* Repositories:
+
+  * return domain models or DTOs
+  * expose domain-specific queries
+  * hide storage details (SQL, ORM, etc.)
+
+### Example responsibilities
+
+* `findById(UserId $id)`
+* `findByEmail(Email $email)`
+* `save(User $user)`
+* `delete(User $user)`
+
+Repositories are **explicit and predictable**, enabling:
+
+* consistent data access
+* easier testing
+* safer refactors
+* future persistence changes without touching services
 
 ---
 
@@ -142,8 +186,16 @@ Domain/Users/Services/
 
 * One service = one use case
 * Services contain business workflows
-* Services accept **DTOs**, never arrays
-* Services do NOT return models directly
+* Services:
+
+  * accept DTOs
+  * call repositories
+  * enforce business rules
+* Services do NOT:
+
+  * return models directly
+  * depend on UI or HTTP
+  * perform authorization checks manually (policies handle this)
 
 ### DTO conventions (mandatory)
 
@@ -223,7 +275,7 @@ Domain/Users/Components/AddUserButton/
 ### Props.php (DTO)
 
 * Typed configuration for GET render
-* Optional validation rules inside the class
+* Validation rules live **inside the class**
 * Immutable
 
 ### Actions/*
@@ -331,6 +383,7 @@ DTOs are used everywhere for consistency.
 
 ## Testing rules
 
+* Every **repository** has tests
 * Every **command service** has a test
 * Every **component** has:
 
