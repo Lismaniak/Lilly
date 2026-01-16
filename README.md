@@ -226,19 +226,232 @@ Domain/Users/Services/
   * return models directly
   * depend on UI or HTTP
   * perform authorization checks manually (policies handle this)
+Below is an **additional section** you can paste into the README.
+It fits logically **after the “DTO conventions (mandatory)” section**, because it explains *why* the DTO types exist.
 
-### DTO conventions (mandatory)
+---
 
-* `*Data.php` → service command input DTO
-* `*Query.php` → service query input DTO
-* `*Result.php` → service output DTO
+## Why different DTO types exist
 
-DTOs:
+Lilly deliberately distinguishes between **Action Input DTOs**, **Service Command Data DTOs**, **Service Query DTOs**, and **Props DTOs**.
+This separation is intentional and enforces architectural boundaries.
 
-* immutable
-* typed
-* no business logic
-* no framework dependencies
+The difference is **intent**, not syntax.
+
+---
+
+## Command Data DTO (`*Data.php`)
+
+Location:
+
+```
+Domain/*/Services/Commands/*Data.php
+```
+
+### Purpose
+
+Represents an **intent to change state**.
+
+> “I want to do something.”
+
+Examples:
+
+* create a user
+* update an email
+* invite a member
+* delete a team
+
+### Characteristics
+
+* Causes side effects
+* Used only by **command services**
+* May fail due to business rules
+* Always paired with a command service
+* Usually returns a `*Result.php`
+
+### Rules
+
+* Immutable
+* Typed
+* No validation of business rules
+* No persistence logic
+* No framework or UI dependencies
+
+---
+
+## Query DTO (`*Query.php`)
+
+Location:
+
+```
+Domain/*/Services/Queries/*Query.php
+```
+
+### Purpose
+
+Represents an **intent to read state**.
+
+> “I want to see something.”
+
+Examples:
+
+* get user profile
+* list users
+* find team members
+
+### Characteristics
+
+* Must be **read-only**
+* Must never cause side effects
+* Safe to repeat
+* Safe to cache
+* Used only by **query services**
+
+### Rules
+
+* Immutable
+* Typed
+* No persistence logic
+* No business rules
+* No framework or UI dependencies
+
+---
+
+## Why Command Data and Query DTOs are different
+
+They represent **fundamentally different intents**.
+
+| Aspect                 | Command Data | Query      |
+| ---------------------- | ------------ | ---------- |
+| Purpose                | Change state | Read state |
+| Side effects           | Yes          | No         |
+| Writes data            | Yes          | No         |
+| Safe to cache          | No           | Yes        |
+| Requires authorization | Yes          | Yes        |
+| Causes transactions    | Often        | Never      |
+
+Keeping them separate allows:
+
+* mechanical enforcement of read vs write
+* optional read-only DB connections
+* safer caching strategies
+* clearer mental models
+* prevention of accidental mutations in queries
+
+---
+
+## Action Input DTO (`*Input.php`)
+
+Location:
+
+```
+Components/*/Actions/*Input.php
+```
+
+### Purpose
+
+Represents **raw input coming from HTTP**.
+
+> “This is what the user submitted.”
+
+### Responsibilities
+
+* Parse HTTP request data
+* Validate **shape**
+* Normalize values (trim, lowercase, cast types)
+
+### Characteristics
+
+* Tied to transport (HTTP)
+* Tied to UI
+* Not reusable across domains
+* Not reusable across services
+
+### Validation here includes
+
+* required fields
+* string length
+* format (email, uuid, etc.)
+
+### Validation here does NOT include
+
+* uniqueness checks
+* permission checks
+* cross-entity business rules
+
+Action Input DTOs exist to **protect the domain from the UI**.
+
+---
+
+## Props DTO (`Props.php`)
+
+Location:
+
+```
+Components/*/Props.php
+```
+
+### Purpose
+
+Represents **component configuration**, not user input.
+
+> “How should this component render or behave?”
+
+### Examples
+
+* button label
+* redirect URL
+* feature flags
+* IDs needed to render data
+
+### Characteristics
+
+* Used only for GET rendering
+* Immutable
+* No side effects
+* No persistence
+* No business rules
+
+Props are **not** user interaction.
+They are **component setup**.
+
+---
+
+## Full lifecycle overview
+
+### POST (mutation)
+
+```
+HTTP Request
+  ↓
+Action Input DTO        (transport shape)
+  ↓
+Service Command Data    (business intent)
+  ↓
+Command Service
+  ↓
+Repositories
+```
+
+### GET (read)
+
+```
+HTTP Request
+  ↓
+Props DTO               (component configuration)
+  ↓
+Query DTO               (read intent)
+  ↓
+Query Service
+  ↓
+Repositories
+```
+
+Each DTO exists to **cut a dependency**:
+
+* UI never leaks into domain
+* transport never leaks into services
+* read logic never leaks into write logic
 
 ---
 
