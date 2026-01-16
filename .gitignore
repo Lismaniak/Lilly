@@ -1,0 +1,20 @@
+# OS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+
+# Environment files
+.env
+.env.*.local
+
+# Logs
+*.log
+
+# Cache / temp
+.cache/
+.tmp/
+
+# Coverage
+coverage/
