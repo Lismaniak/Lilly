@@ -83,40 +83,70 @@ Domain/Users/Models/
 
 ## Repositories (Persistence boundary)
 
+Repositories are split to **force architectural discipline** between reads and writes.
+
 ```
 Domain/Users/Repositories/
-  UserRepository.php
+  Queries/
+    UserQueryRepository.php
+  Commands/
+    UserCommandRepository.php
 ```
 
-Repositories define **how domain data is persisted and queried**.
+### Repository rules (strict)
 
-### Repository rules
+* `*QueryRepository`
 
-* Repositories encapsulate **all persistence logic**
+  * may only execute **SELECT / read operations**
+  * must never modify state
+
+* `*CommandRepository`
+
+  * may only execute **INSERT / UPDATE / DELETE**
+  * must never return arbitrary query results
+
+* Repositories:
+
+  * encapsulate **all persistence logic**
+  * hide SQL / ORM / storage details
+  * return domain models or DTOs
+  * contain **no business logic**
+
 * Services MUST NOT:
 
   * write SQL
   * use query builders directly
   * talk to the database
-* Repositories:
 
-  * return domain models or DTOs
-  * expose domain-specific queries
-  * hide storage details (SQL, ORM, etc.)
+---
 
-### Example responsibilities
+## Service → Repository usage rules (enforced)
 
-* `findById(UserId $id)`
-* `findByEmail(Email $email)`
-* `save(User $user)`
-* `delete(User $user)`
+```
+Services/Queries   → QueryRepositories ONLY
+Services/Commands  → CommandRepositories (and QueryRepositories if needed)
+```
 
-Repositories are **explicit and predictable**, enabling:
+* Query services:
 
-* consistent data access
-* easier testing
-* safer refactors
-* future persistence changes without touching services
+  * read-only
+  * may not cause side effects
+  * may only depend on `*QueryRepository`
+
+* Command services:
+
+  * perform mutations
+  * may depend on:
+
+    * `*QueryRepository` (for checks, lookups)
+    * `*CommandRepository` (for writes)
+
+This split enables:
+
+* mechanical enforcement
+* static analysis
+* optional read-only DB connections
+* consistent mental model
 
 ---
 
@@ -383,7 +413,8 @@ DTOs are used everywhere for consistency.
 
 ## Testing rules
 
-* Every **repository** has tests
+* Every **query repository** has tests
+* Every **command repository** has tests
 * Every **command service** has a test
 * Every **component** has:
 
