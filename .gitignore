@@ -22,3 +22,7 @@
 # Coverage
 coverage/
 
+# Lilly
+src/Domains/
+src/App/
+
