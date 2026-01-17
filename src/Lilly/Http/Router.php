@@ -83,15 +83,17 @@ final class Router
             '/\{([A-Za-z_][A-Za-z0-9_]*)\}/',
             static function (array $m) use (&$paramNames): string {
                 $paramNames[] = $m[1];
-                return '([^\/]+)';
+                return '___LILLY_PARAM___';
             },
-            preg_quote($pattern, '#')
+            $pattern
         );
 
         if (!is_string($regex)) {
             return null;
         }
 
+        $regex = preg_quote($regex, '#');
+        $regex = str_replace('___LILLY_PARAM___', '([^\/]+)', $regex);
         $regex = '#^' . $regex . '$#';
 
         $matches = [];
