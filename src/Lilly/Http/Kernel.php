@@ -54,6 +54,7 @@ final class Kernel
 
     private function registerRoutes(Router $router): void
     {
+        // Core routes (framework-level, not domain-owned)
         $router->get(
             path: '/health',
             handler: fn () => Response::json(['ok' => true]),
@@ -61,18 +62,64 @@ final class Kernel
             gates: [],
         );
 
-        $router->get(
-            path: '/users',
-            handler: fn () => Response::text("Users index\n"),
-            domains: ['users'],
-            gates: ['users.view'],
-        );
+        // Domain routes (auto-discovered)
+        $this->registerDomainRoutes($router);
+    }
 
-        $router->post(
-            path: '/users/invite',
-            handler: fn () => Response::text("Invited\n"),
-            domains: ['users'],
-            gates: ['users.invite'],
-        );
+    /**
+     * Convention:
+     * src/Domains/<Domain>/Routes/web.php
+     * src/Domains/<Domain>/Routes/api.php
+     * src/Domains/<Domain>/Routes/components.php
+     *
+     * Each file must "return callable" that accepts DomainRouter.
+     */
+    private function registerDomainRoutes(Router $router): void
+    {
+        $domainsPath = $this->projectRoot . '/src/Domains';
+
+        if (!is_dir($domainsPath)) {
+            return;
+        }
+
+        $items = scandir($domainsPath);
+        if ($items === false) {
+            return;
+        }
+
+        foreach ($items as $domain) {
+            if ($domain === '.' || $domain === '..') {
+                continue;
+            }
+
+            $domainDir = $domainsPath . '/' . $domain;
+
+            if (!is_dir($domainDir)) {
+                continue;
+            }
+
+            if (str_starts_with($domain, '.')) {
+                continue;
+            }
+
+            $domainKey = strtolower($domain);
+            $domainRouter = new DomainRouter($router, $domainKey);
+
+            foreach (['web.php', 'api.php', 'components.php'] as $file) {
+                $path = $domainDir . '/Routes/' . $file;
+
+                if (!is_file($path)) {
+                    continue;
+                }
+
+                $registrar = require $path;
+
+                if (!is_callable($registrar)) {
+                    throw new RuntimeException("Route file must return callable: {$path}");
+                }
+
+                $registrar($domainRouter);
+            }
+        }
     }
 }

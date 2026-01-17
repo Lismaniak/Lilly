@@ -28,6 +28,11 @@ final class MakeDomainCommand extends Command
         $nameRaw = (string) $input->getArgument('name');
         $domain = $this->normalizeDomainName($nameRaw);
 
+        if ($domain === '') {
+            $output->writeln('<error>Invalid domain name. Use letters/numbers only, e.g. Users</error>');
+            return Command::FAILURE;
+        }
+
         $domainRoot = $this->projectRoot . '/src/Domains/' . $domain;
 
         if (is_dir($domainRoot)) {
@@ -60,19 +65,19 @@ final class MakeDomainCommand extends Command
 
         $this->writeFile(
             $domainRoot . '/Routes/web.php',
-            "<?php\ndeclare(strict_types=1);\n\n// Domain routes for {$domain} (web)\n",
+            $this->routesWebStub($domain),
             $output
         );
 
         $this->writeFile(
             $domainRoot . '/Routes/api.php',
-            "<?php\ndeclare(strict_types=1);\n\n// Domain routes for {$domain} (api)\n",
+            $this->routesApiStub($domain),
             $output
         );
 
         $this->writeFile(
             $domainRoot . '/Routes/components.php',
-            "<?php\ndeclare(strict_types=1);\n\n// Optional: component route overrides for {$domain}\n",
+            $this->routesComponentsStub($domain),
             $output
         );
 
@@ -103,12 +108,7 @@ final class MakeDomainCommand extends Command
     private function normalizeDomainName(string $name): string
     {
         $name = trim($name);
-        $name = preg_replace('/[^A-Za-z0-9]/', '', $name) ?? $name;
-
-        if ($name === '') {
-            return 'Domain';
-        }
-
+        $name = preg_replace('/[^A-Za-z0-9]/', '', $name) ?? '';
         return ucfirst($name);
     }
 
@@ -131,18 +131,33 @@ final class MakeDomainCommand extends Command
         return ltrim(str_replace($this->projectRoot, '', $absPath), '/');
     }
 
+    private function routesWebStub(string $domain): string
+    {
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\DomainRouter;\n\nreturn function (DomainRouter \$router): void {\n    // Web routes for {$domain}\n};\n";
+    }
+
+    private function routesApiStub(string $domain): string
+    {
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\DomainRouter;\n\nreturn function (DomainRouter \$router): void {\n    // API routes for {$domain}\n};\n";
+    }
+
+    private function routesComponentsStub(string $domain): string
+    {
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\DomainRouter;\n\nreturn function (DomainRouter \$router): void {\n    // Component route overrides for {$domain} (optional)\n};\n";
+    }
+
     private function policyStub(string $domain, string $domainKey): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domain\\{$domain}\\Policies;\n\nuse Lilly\\Http\\Request;\nuse Lilly\\Security\\DomainPolicy;\nuse Lilly\\Security\\PolicyDecision;\n\nfinal class {$domain}Policy implements DomainPolicy\n{\n    public function domain(): string\n    {\n        return '{$domainKey}';\n    }\n\n    public function authorize(Request \$request): PolicyDecision\n    {\n        return PolicyDecision::allow();\n    }\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Policies;\n\nuse Lilly\\Http\\Request;\nuse Lilly\\Security\\DomainPolicy;\nuse Lilly\\Security\\PolicyDecision;\n\nfinal class {$domain}Policy implements DomainPolicy\n{\n    public function domain(): string\n    {\n        return '{$domainKey}';\n    }\n\n    public function authorize(Request \$request): PolicyDecision\n    {\n        return PolicyDecision::allow();\n    }\n}\n";
     }
 
     private function queryRepoStub(string $domain, string $domainKey): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domain\\{$domain}\\Repositories\\Queries;\n\nfinal class {$domain}QueryRepository\n{\n    // Read-only repository for domain '{$domainKey}'\n    // Only SELECT operations allowed\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories\\Queries;\n\nfinal class {$domain}QueryRepository\n{\n    // Read-only repository for domain '{$domainKey}'\n    // Only SELECT operations allowed\n}\n";
     }
 
     private function commandRepoStub(string $domain, string $domainKey): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domain\\{$domain}\\Repositories\\Commands;\n\nfinal class {$domain}CommandRepository\n{\n    // Write repository for domain '{$domainKey}'\n    // Only INSERT/UPDATE/DELETE operations allowed\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories\\Commands;\n\nfinal class {$domain}CommandRepository\n{\n    // Write repository for domain '{$domainKey}'\n    // Only INSERT/UPDATE/DELETE operations allowed\n}\n";
     }
 }
