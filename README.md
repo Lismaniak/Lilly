@@ -1,4 +1,4 @@
-# Lilly Framework – Architecture & Conventions
+# Lilly Framework – Architecture and Conventions
 
 This document defines the enforced folder structure, component model, repository discipline, routing conventions, and security flow used in Lilly.
 
@@ -35,11 +35,11 @@ src/
   App/                # Application layer (components, cross-components)
 ```
 
-Notes:
+Rules:
 
-* `Domains/` contains all business logic.
-* `App/` is allowed to depend on domain services.
-* Domain code must never depend on `App/`.
+* `Domains/` contains all business logic
+* `App/` may depend on domain services
+* Domain code must never depend on `App/`
 
 ---
 
@@ -67,11 +67,11 @@ Domains/<DomainName>/
 
 ### Domain rules
 
-* A domain owns its data, rules, and permissions.
-* Domain code may NOT depend on `App/`.
-* Services may depend on repositories.
-* Domain policies are enforced before domain code executes.
-* Services are the only place where repositories are used.
+* A domain owns its data, rules, and permissions
+* Domain code may NOT depend on `App/`
+* Services may depend on repositories
+* Domain policies are enforced before domain code executes
+* Services are the only place where repositories are used
 
 ---
 
@@ -103,7 +103,8 @@ Domains/Users/Models/
 **UserRelations.php**
 
 * Domain relations (hasMany, belongsTo, etc.)
-* No queries or side effects
+* No queries
+* No side effects
 
 ---
 
@@ -150,7 +151,8 @@ Services must NOT:
 
 ```
 Services/Queries   -> QueryRepositories only
-Services/Commands  -> CommandRepositories (QueryRepositories allowed for checks)
+Services/Commands  -> CommandRepositories
+                      (QueryRepositories allowed for checks)
 ```
 
 **Query services**
@@ -195,10 +197,10 @@ Domains/Users/Policies/
     CanInviteUser.php
 ```
 
-* Policies act as mandatory middleware.
-* No domain code executes unless its policy passes.
-* Gates are fine-grained permission checks.
-* Enforced automatically by the Kernel.
+* Policies act as mandatory middleware
+* No domain code executes unless its policy passes
+* Gates are fine-grained permission checks
+* Enforced automatically by the Kernel
 
 ---
 
@@ -299,13 +301,6 @@ Domains/*/Services/Commands/*Data.php
 
 Purpose: represents an intent to change state.
 
-Examples:
-
-* Create a user
-* Update an email
-* Invite a member
-* Delete a team
-
 Characteristics:
 
 * Causes side effects
@@ -331,20 +326,6 @@ Characteristics:
 * No side effects
 * Safe to repeat
 * Safe to cache
-
----
-
-## Why command data and query DTOs are different
-
-They represent fundamentally different intents.
-
-| Aspect              | Command Data | Query      |
-| ------------------- | ------------ | ---------- |
-| Purpose             | Change state | Read state |
-| Side effects        | Yes          | No         |
-| Writes data         | Yes          | No         |
-| Safe to cache       | No           | Yes        |
-| Causes transactions | Often        | Never      |
 
 ---
 
@@ -389,13 +370,6 @@ App/**/Props.php
 ```
 
 Purpose: represents component configuration, not user input.
-
-Examples:
-
-* Labels
-* Redirect URLs
-* Feature flags
-* IDs needed to render data
 
 Props are setup, not interaction.
 
@@ -448,24 +422,23 @@ Domain policies are enforced automatically.
 
 ---
 
-### Cross-domain routes
+## Cross-domain routes
 
 Cross-domain components live in `App/CrossComponents`.
 
 ```
-App/CrossComponents/<signature>/<Component>/
+App/CrossComponents/<Group>/<Component>/
   Routes/
     web.php
     api.php
     components.php
 ```
 
-Signature rules:
+Group rules:
 
-* Lowercase
-* Alphabetical
-* Joined with `+`
-* Example: `teams+users`
+* Group is a PascalCase concatenation of involved domain names
+* Domain names are lowercased, sorted alphabetically, then capitalized
+* Example: domains `Teams` and `Users` become `TeamsUsers`
 
 Routes are registered with `CrossDomainRouter` and enforce all involved domain policies.
 
@@ -502,13 +475,13 @@ users.add-user-button
 ### Cross-domain components
 
 ```
-App/CrossComponents/teams+users/InviteUserToTeam/
+App/CrossComponents/TeamsUsers/InviteUserToTeam/
 ```
 
 Component ID convention:
 
 ```
-cross.teams+users.invite-user-to-team
+cross.teamsusers.invite-user-to-team
 ```
 
 ---
@@ -551,6 +524,9 @@ shape:domain:remove <Domain>
 
 shape:cross:make <Name> <DomainA> <DomainB> [...DomainN]
 shape:cross:remove <Name>
+
+shape:gate:make <Domain> <GateClass>
+shape:gate:remove <Domain> <GateClass>
 ```
 
 Scaffolding is the only supported way to create structure.
