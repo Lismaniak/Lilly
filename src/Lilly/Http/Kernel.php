@@ -186,7 +186,8 @@ final class Kernel
                     throw new RuntimeException("Route file must return callable: {$path}");
                 }
 
-                $registrar($router);
+                $appRouter = new AppRouter($router);
+                $registrar($appRouter);
             }
         }
     }

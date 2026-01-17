@@ -108,7 +108,7 @@ final class MakeAppComponentCommand extends Command
 
     private function routesStub(): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\Router;\n\nreturn function (Router \$router): void {\n};\n";
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\AppRouter;\n\nreturn function (AppRouter \$router): void {\n};\n";
     }
 
     private function actionStub(string $name): string

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Lilly\Console;
 
 use Lilly\Console\Commands\MakeAppComponentCommand;
+use Lilly\Console\Commands\MakeAppGateCommand;
+use Lilly\Console\Commands\MakeAppPolicyCommand;
 use Lilly\Console\Commands\MakeGateCommand;
 use Lilly\Console\Commands\RemoveAppComponentCommand;
 use Lilly\Console\Commands\RemoveCrossComponentCommand;
@@ -28,6 +30,8 @@ final class ApplicationFactory
         $app->addCommand(new RemoveGateCommand(projectRoot: $projectRoot));
         $app->addCommand(new MakeAppComponentCommand(projectRoot: $projectRoot));
         $app->addCommand(new RemoveAppComponentCommand(projectRoot: $projectRoot));
+        $app->addCommand(new MakeAppPolicyCommand(projectRoot: $projectRoot));
+        $app->addCommand(new MakeAppGateCommand(projectRoot: $projectRoot));
 
         return $app;
     }
