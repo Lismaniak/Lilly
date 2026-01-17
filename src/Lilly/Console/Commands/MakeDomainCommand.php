@@ -13,7 +13,7 @@ final class MakeDomainCommand extends Command
     public function __construct(
         private readonly string $projectRoot
     ) {
-        parent::__construct('make:domain');
+        parent::__construct('shape:domain:make');
     }
 
     protected function configure(): void
