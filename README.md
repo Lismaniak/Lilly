@@ -17,8 +17,7 @@ This is enforced by **scaffolding**, **strict conventions**, and **structural ru
 ```
 src/
   Lilly/              # Framework core (empty for now)
-
-  Domain/             # Business domains (Users, Teams, Billing, etc.)
+  Domains/             # Business domains (Users, Teams, Billing, etc.)
   UI/                 # Cross-domain and shared UI components
 ```
 
