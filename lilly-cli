@@ -1,0 +1,14 @@
+<?php
+declare(strict_types=1);
+
+if (PHP_VERSION_ID < 80300) {
+    fwrite(STDERR, "Lilly CLI requires PHP 8.3 or higher.\n");
+    exit(1);
+}
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Lilly\Console\ApplicationFactory;
+
+$application = ApplicationFactory::create(projectRoot: __DIR__);
+exit($application->run());
