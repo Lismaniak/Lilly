@@ -1,10 +1,3 @@
-Below is a **fully rewritten README.md**, end to end.
-It is internally consistent with your current codebase, namespaces, folder layout, CLI commands, router, and security model.
-
-You can **replace the entire README.md with this**.
-
----
-
 ```md
 # Lilly Framework – Architecture & Conventions
 
