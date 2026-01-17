@@ -11,7 +11,7 @@
   "autoload": {
     "psr-4": {
       "Lilly\\": "src/Lilly/",
-      "Domain\\": "src/Domains/",
+      "Domains\\": "src/Domains/",
       "UI\\": "src/UI/"
     }
   },
