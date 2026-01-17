@@ -64,6 +64,7 @@ final class Kernel
 
         // Domain routes (auto-discovered)
         $this->registerDomainRoutes($router);
+        $this->registerCrossComponentRoutes($router);
     }
 
     /**
@@ -119,6 +120,69 @@ final class Kernel
                 }
 
                 $registrar($domainRouter);
+            }
+        }
+    }
+
+    /**
+     * Convention:
+     * src/UI/CrossComponents/<signature>/Routes/web.php
+     * src/UI/CrossComponents/<signature>/Routes/api.php
+     * src/UI/CrossComponents/<signature>/Routes/components.php
+     *
+     * signature example:
+     * teams+users
+     *
+     * Each file must "return callable" that accepts CrossDomainRouter.
+     */
+    private function registerCrossComponentRoutes(Router $router): void
+    {
+        $root = $this->projectRoot . '/src/UI/CrossComponents';
+
+        if (!is_dir($root)) {
+            return;
+        }
+
+        $items = scandir($root);
+        if ($items === false) {
+            return;
+        }
+
+        foreach ($items as $signature) {
+            if ($signature === '.' || $signature === '..') {
+                continue;
+            }
+
+            if (str_starts_with($signature, '.')) {
+                continue;
+            }
+
+            $signatureDir = $root . '/' . $signature;
+            if (!is_dir($signatureDir)) {
+                continue;
+            }
+
+            $domainKeys = array_values(array_filter(explode('+', strtolower($signature))));
+            if ($domainKeys === []) {
+                continue;
+            }
+
+            $crossRouter = new CrossDomainRouter($router, $domainKeys);
+
+            foreach (['web.php', 'api.php', 'components.php'] as $file) {
+                $path = $signatureDir . '/Routes/' . $file;
+
+                if (!is_file($path)) {
+                    continue;
+                }
+
+                $registrar = require $path;
+
+                if (!is_callable($registrar)) {
+                    throw new RuntimeException("Route file must return callable: {$path}");
+                }
+
+                $registrar($crossRouter);
             }
         }
     }

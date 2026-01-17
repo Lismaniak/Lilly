@@ -12,7 +12,7 @@
     "psr-4": {
       "Lilly\\": "src/Lilly/",
       "Domains\\": "src/Domains/",
-      "UI\\": "src/UI/"
+      "App\\": "src/App/"
     }
   },
   "autoload-dev": {
