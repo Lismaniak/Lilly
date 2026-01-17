@@ -14,7 +14,6 @@ final class Kernel
         private readonly string $projectRoot
     ) {
         $this->router = new Router();
-
         $this->registerRoutes($this->router);
     }
 
@@ -69,6 +68,11 @@ final class Kernel
 
         // Domain routes (auto-discovered)
         $this->registerDomainRoutes($router);
+
+        // No domain routes (auto-discovered)
+        $this->registerAppComponentRoutes($router);
+
+        // Cross-domain component routes (auto-discovered)
         $this->registerCrossComponentRoutes($router);
     }
 
@@ -78,7 +82,7 @@ final class Kernel
      * src/Domains/<Domain>/Routes/api.php
      * src/Domains/<Domain>/Routes/components.php
      *
-     * Each file must "return callable" that accepts DomainRouter.
+     * Each file must return callable that accepts DomainRouter.
      */
     private function registerDomainRoutes(Router $router): void
     {
@@ -98,13 +102,12 @@ final class Kernel
                 continue;
             }
 
-            $domainDir = $domainsPath . '/' . $domain;
-
-            if (!is_dir($domainDir)) {
+            if (str_starts_with($domain, '.')) {
                 continue;
             }
 
-            if (str_starts_with($domain, '.')) {
+            $domainDir = $domainsPath . '/' . $domain;
+            if (!is_dir($domainDir)) {
                 continue;
             }
 
@@ -131,51 +134,46 @@ final class Kernel
 
     /**
      * Convention:
-     * src/App/CrossComponents/<signature>/Routes/web.php
-     * src/App/CrossComponents/<signature>/Routes/api.php
-     * src/App/CrossComponents/<signature>/Routes/components.php
+     * src/App/Components/<Component>/Routes/web.php
+     * src/App/Components/<Component>/Routes/api.php
+     * src/App/Components/<Component>/Routes/components.php
      *
-     * signature example:
-     * teams+users
-     *
-     * Each file must "return callable" that accepts CrossDomainRouter.
+     * Each file must return callable that accepts Router.
      */
-    private function registerCrossComponentRoutes(Router $router): void
+    private function registerAppComponentRoutes(Router $router): void
     {
-        $root = $this->projectRoot . '/src/App/CrossComponents';
+        $root = $this->projectRoot . '/src/App/Components';
 
         if (!is_dir($root)) {
             return;
         }
 
-        $items = scandir($root);
-        if ($items === false) {
+        $components = scandir($root);
+        if ($components === false) {
             return;
         }
 
-        foreach ($items as $signature) {
-            if ($signature === '.' || $signature === '..') {
+        foreach ($components as $component) {
+            if ($component === '.' || $component === '..') {
                 continue;
             }
 
-            if (str_starts_with($signature, '.')) {
+            if (str_starts_with($component, '.')) {
                 continue;
             }
 
-            $signatureDir = $root . '/' . $signature;
-            if (!is_dir($signatureDir)) {
+            $componentDir = $root . '/' . $component;
+            if (!is_dir($componentDir)) {
                 continue;
             }
 
-            $domainKeys = array_values(array_filter(explode('+', strtolower($signature))));
-            if ($domainKeys === []) {
+            $routesDir = $componentDir . '/Routes';
+            if (!is_dir($routesDir)) {
                 continue;
             }
-
-            $crossRouter = new CrossDomainRouter($router, $domainKeys);
 
             foreach (['web.php', 'api.php', 'components.php'] as $file) {
-                $path = $signatureDir . '/Routes/' . $file;
+                $path = $routesDir . '/' . $file;
 
                 if (!is_file($path)) {
                     continue;
@@ -187,8 +185,178 @@ final class Kernel
                     throw new RuntimeException("Route file must return callable: {$path}");
                 }
 
-                $registrar($crossRouter);
+                $registrar($router);
             }
         }
+    }
+
+    /**
+     * Convention:
+     * src/App/CrossComponents/<Group>/<Component>/Routes/web.php
+     * src/App/CrossComponents/<Group>/<Component>/Routes/api.php
+     * src/App/CrossComponents/<Group>/<Component>/Routes/components.php
+     *
+     * Group example: TeamsUsers
+     * Domains are derived from the PascalCase group name by matching existing domain folders in src/Domains.
+     *
+     * Each file must return callable that accepts CrossDomainRouter.
+     */
+    private function registerCrossComponentRoutes(Router $router): void
+    {
+        $root = $this->projectRoot . '/src/App/CrossComponents';
+
+        if (!is_dir($root)) {
+            return;
+        }
+
+        $groups = scandir($root);
+        if ($groups === false) {
+            return;
+        }
+
+        $knownDomainKeys = $this->discoverKnownDomainKeys();
+
+        foreach ($groups as $group) {
+            if ($group === '.' || $group === '..') {
+                continue;
+            }
+
+            if (str_starts_with($group, '.')) {
+                continue;
+            }
+
+            $groupDir = $root . '/' . $group;
+            if (!is_dir($groupDir)) {
+                continue;
+            }
+
+            $domainKeys = $this->parseDomainKeysFromGroup($group, $knownDomainKeys);
+            if ($domainKeys === []) {
+                throw new RuntimeException("Invalid cross component group '{$group}'. Cannot derive domains from group name.");
+            }
+
+            $components = scandir($groupDir);
+            if ($components === false) {
+                continue;
+            }
+
+            foreach ($components as $component) {
+                if ($component === '.' || $component === '..') {
+                    continue;
+                }
+
+                if (str_starts_with($component, '.')) {
+                    continue;
+                }
+
+                $componentDir = $groupDir . '/' . $component;
+                if (!is_dir($componentDir)) {
+                    continue;
+                }
+
+                $routesDir = $componentDir . '/Routes';
+                if (!is_dir($routesDir)) {
+                    continue;
+                }
+
+                $crossRouter = new CrossDomainRouter($router, $domainKeys);
+
+                foreach (['web.php', 'api.php', 'components.php'] as $file) {
+                    $path = $routesDir . '/' . $file;
+
+                    if (!is_file($path)) {
+                        continue;
+                    }
+
+                    $registrar = require $path;
+
+                    if (!is_callable($registrar)) {
+                        throw new RuntimeException("Route file must return callable: {$path}");
+                    }
+
+                    $registrar($crossRouter);
+                }
+            }
+        }
+    }
+
+    /**
+     * @return list<string> lowercase domain keys derived from src/Domains folder names
+     */
+    private function discoverKnownDomainKeys(): array
+    {
+        $domainsPath = $this->projectRoot . '/src/Domains';
+
+        if (!is_dir($domainsPath)) {
+            return [];
+        }
+
+        $items = scandir($domainsPath);
+        if ($items === false) {
+            return [];
+        }
+
+        $keys = [];
+
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            if (str_starts_with($item, '.')) {
+                continue;
+            }
+
+            if (!is_dir($domainsPath . '/' . $item)) {
+                continue;
+            }
+
+            $keys[] = strtolower($item);
+        }
+
+        $keys = array_values(array_unique($keys));
+
+        usort(
+            $keys,
+            static fn (string $a, string $b): int => strlen($b) <=> strlen($a)
+        );
+
+        return $keys;
+    }
+
+    /**
+     * Parses group name like "TeamsUsers" into ["teams", "users"]
+     * by greedily matching known domain keys from src/Domains.
+     *
+     * @param list<string> $knownDomainKeys
+     * @return list<string>
+     */
+    private function parseDomainKeysFromGroup(string $group, array $knownDomainKeys): array
+    {
+        $s = strtolower($group);
+        $out = [];
+
+        while ($s !== '') {
+            $matched = false;
+
+            foreach ($knownDomainKeys as $key) {
+                if ($key === '') {
+                    continue;
+                }
+
+                if (str_starts_with($s, $key)) {
+                    $out[] = $key;
+                    $s = substr($s, strlen($key));
+                    $matched = true;
+                    break;
+                }
+            }
+
+            if (!$matched) {
+                return [];
+            }
+        }
+
+        return $out;
     }
 }

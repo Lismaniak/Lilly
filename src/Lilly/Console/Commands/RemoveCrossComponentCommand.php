@@ -33,14 +33,14 @@ final class RemoveCrossComponentCommand extends Command
             return Command::FAILURE;
         }
 
-        $base = "{$this->projectRoot}/src/App/CrossComponents";
+        $crossBase = "{$this->projectRoot}/src/App/CrossComponents";
 
-        if (!is_dir($base)) {
+        if (!is_dir($crossBase)) {
             $output->writeln('<error>No cross components folder found: src/App/CrossComponents</error>');
             return Command::FAILURE;
         }
 
-        $matches = $this->findCrossComponentMatches($base, $name);
+        $matches = $this->findCrossComponentMatches($crossBase, $name);
 
         if (count($matches) === 0) {
             $output->writeln("<error>CrossComponent not found:</error> {$name}");
@@ -60,7 +60,7 @@ final class RemoveCrossComponentCommand extends Command
         $groupPath = $matches[0]['groupPath'];
         $groupName = $matches[0]['groupName'];
 
-        $expectedBase = realpath($base);
+        $expectedBase = realpath($crossBase);
         $realComponent = realpath($componentPath);
 
         if ($expectedBase === false || $realComponent === false || !str_starts_with($realComponent, $expectedBase)) {
@@ -81,10 +81,23 @@ final class RemoveCrossComponentCommand extends Command
 
         $this->deleteDirectory($componentPath);
 
-        // If group folder is now empty, delete it too.
+        // 1) If group folder is now empty, delete it too.
         if ($this->isDirectoryEmpty($groupPath)) {
             rmdir($groupPath);
             $output->writeln(" + dir  removed " . $this->rel($groupPath));
+        }
+
+        // 2) If CrossComponents folder is now empty, delete it too.
+        if ($this->isDirectoryEmpty($crossBase)) {
+            rmdir($crossBase);
+            $output->writeln(" + dir  removed " . $this->rel($crossBase));
+        }
+
+        // 3) If App folder is now empty, delete it too.
+        $appBase = "{$this->projectRoot}/src/App";
+        if (is_dir($appBase) && $this->isDirectoryEmpty($appBase)) {
+            rmdir($appBase);
+            $output->writeln(" + dir  removed " . $this->rel($appBase));
         }
 
         $output->writeln("<info>Removed cross component:</info> {$groupName}/{$name}");
@@ -153,6 +166,11 @@ final class RemoveCrossComponentCommand extends Command
                 continue;
             }
 
+            // Ignore common dotfiles like .DS_Store so cleanup works on macOS
+            if (str_starts_with($item, '.')) {
+                continue;
+            }
+
             return false;
         }
 
@@ -165,7 +183,12 @@ final class RemoveCrossComponentCommand extends Command
             return;
         }
 
-        foreach (scandir($path) as $item) {
+        $items = scandir($path);
+        if ($items === false) {
+            return;
+        }
+
+        foreach ($items as $item) {
             if ($item === '.' || $item === '..') {
                 continue;
             }
@@ -174,9 +197,10 @@ final class RemoveCrossComponentCommand extends Command
 
             if (is_dir($fullPath)) {
                 $this->deleteDirectory($fullPath);
-            } else {
-                unlink($fullPath);
+                continue;
             }
+
+            unlink($fullPath);
         }
 
         rmdir($path);

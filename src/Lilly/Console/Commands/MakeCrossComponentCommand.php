@@ -178,9 +178,7 @@ final class MakeCrossComponentCommand extends Command
      */
     private function routesStub(array $domainKeys): string
     {
-        $keys = implode(', ', $domainKeys);
-
-        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\CrossDomainRouter;\n\nreturn function (CrossDomainRouter \$router): void {\n    // routes for domains: {$keys}\n};\n";
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\CrossDomainRouter;\n\nreturn function (CrossDomainRouter \$router): void {\n};\n";
     }
 
     private function actionStub(string $group, string $name): string
