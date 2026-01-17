@@ -38,6 +38,7 @@ final class Kernel
                 return Response::text("403 Forbidden\n{$domainDecision->message}\n", $domainDecision->status);
             }
 
+            $this->assertGatesAllowedForRoute($route);
             $gateDecision = $gate->authorizeGates($request, $route->gates);
             if (!$gateDecision->allowed) {
                 return Response::text("403 Forbidden\n{$gateDecision->message}\n", $gateDecision->status);
@@ -359,4 +360,42 @@ final class Kernel
 
         return $out;
     }
+
+    private function assertGatesAllowedForRoute(Route $route): void
+    {
+        foreach ($route->gates as $gate) {
+            if ($gate === '') {
+                throw new RuntimeException('Gate name may not be empty');
+            }
+
+            $prefix = $this->gateDomainPrefix($gate);
+
+            // If you ever add "app.*" gates, they must never be used by domain routes.
+            if ($prefix === 'app' && $route->domains !== []) {
+                throw new RuntimeException("App gate '{$gate}' is not allowed on domain or cross-domain routes");
+            }
+
+            // Domain or cross-domain route: gate must match one of the route domains.
+            // Examples:
+            // - domains: ['users'] -> only users.*
+            // - domains: ['teams','users'] -> teams.* or users.*
+            if ($route->domains !== []) {
+                if ($prefix === null || !in_array($prefix, $route->domains, true)) {
+                    $allowed = implode(', ', $route->domains);
+                    throw new RuntimeException("Gate '{$gate}' is not allowed for this route. Allowed domains: {$allowed}");
+                }
+            }
+        }
+    }
+
+    private function gateDomainPrefix(string $gate): ?string
+    {
+        $pos = strpos($gate, '.');
+        if ($pos === false || $pos === 0) {
+            return null;
+        }
+
+        return substr($gate, 0, $pos);
+    }
+
 }
