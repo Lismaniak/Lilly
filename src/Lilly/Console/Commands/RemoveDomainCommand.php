@@ -39,8 +39,8 @@ final class RemoveDomainCommand extends Command
             return Command::FAILURE;
         }
 
-        if (!str_starts_with(realpath($domainRoot), realpath($this->projectRoot . '/src/Domain'))) {
-            $output->writeln("<error>Refusing to delete outside src/Domain</error>");
+        if (!str_starts_with(realpath($domainRoot), realpath($this->projectRoot . '/src/Domains'))) {
+            $output->writeln("<error>Refusing to delete outside src/Domains</error>");
             return Command::FAILURE;
         }
 
