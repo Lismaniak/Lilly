@@ -7,4 +7,6 @@ services:
     working_dir: /app
     volumes:
       - .:/app
-    command: tail -f /dev/null
+    command: php -S 0.0.0.0:8000 -t public
+    ports:
+      - "8000:8000"
