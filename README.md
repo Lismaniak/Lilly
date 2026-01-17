@@ -1,14 +1,3 @@
-Below is a **clean rewrite**, fully aligned with your **current reality**:
-
-* `UI` is gone
-* `App` owns components and cross-components
-* Routing, CLI scaffolding, and Kernel behavior are consistent
-* No meta formatting, just normal Markdown that pastes cleanly
-
-You can **replace the entire README.md with this**.
-
----
-
 # Lilly Framework – Architecture & Conventions
 
 This document defines the enforced folder structure, component model, repository discipline, routing conventions, and security flow used in Lilly.
