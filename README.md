@@ -1,655 +1,547 @@
+Below is a **fully rewritten README.md**, end to end.
+It is internally consistent with your current codebase, namespaces, folder layout, CLI commands, router, and security model.
+
+You can **replace the entire README.md with this**.
+
+---
+
+```md
 # Lilly Framework – Architecture & Conventions
 
-This document describes the **enforced folder structure**, **component model**, **repository usage**, and **DTO conventions** used in Lilly.
+Lilly is an **opinionated PHP meta-framework** focused on **architectural uniformity**, **strict boundaries**, and **mechanical enforcement** of patterns.
 
-The goal of Lilly is **architectural uniformity**:
+It is not a library of helpers.
+It is a framework that **forces structure**.
+
+The goal is simple:
 
 * every application looks the same
-* every feature is implemented in the same pattern
+* every feature follows the same flow
 * only business logic differs
 
-This is enforced by **scaffolding**, **strict conventions**, and **structural rules**.
+This is enforced through:
+* scaffolding
+* conventions
+* runtime checks
+* zero “magic”
+
+---
+
+## Core principles
+
+* Structure beats flexibility
+* Read and write paths are separated
+* UI never leaks into the domain
+* Domains own rules and permissions
+* Authorization is mandatory and automatic
+* Escape hatches are explicit
 
 ---
 
 ## High-level structure
 
 ```
+
 src/
-  Lilly/              # Framework core (empty for now)
-  Domains/             # Business domains (Users, Teams, Billing, etc.)
-  UI/                 # Cross-domain and shared UI components
+Lilly/              # Framework core
+Domains/            # Business domains (Users, Teams, Billing, ...)
+UI/                 # Non-domain UI components
+App/                # Application-specific glue (cross-components)
+
 ```
 
 ---
 
-## Domain structure
+## Domains (bounded contexts)
 
-Each domain is a **bounded context** and contains everything related to that domain.
+Each domain is a **fully isolated bounded context**.
 
 ```
+
 Domains/<DomainName>/
-  Models/
-  Repositories/
-  Migrations/
-  Policies/
-  Validators/
-  Services/
-  Routes/
-  Components/
-  Tests/
+Models/
+Repositories/
+Queries/
+Commands/
+Migrations/
+Policies/
+Gates/
+Validators/
+Services/
+Queries/
+Commands/
+Routes/
+Components/
+Tests/
+
 ```
 
-### Domain rules
+### Domain rules (strict)
 
-* A domain **owns its data, rules, and permissions**
-* Domain code may NOT depend on UI
-* UI components may depend on domain services
-* Services may depend on repositories
-* Domain policies are always enforced before domain code executes
-* Services are the **only place** where repositories are used
+* A domain owns:
+  * its data
+  * its rules
+  * its permissions
+* Domain code:
+  * MUST NOT depend on UI
+  * MUST NOT depend on other domains
+* Authorization:
+  * is enforced automatically
+  * cannot be skipped
+* Repositories:
+  * are the only persistence boundary
+* Services:
+  * are the only place where workflows live
 
 ---
 
 ## Models
 
 ```
+
 Domains/Users/Models/
-  User.php
-  UserFields.php
-  UserRelations.php
+User.php
+UserFields.php
+UserRelations.php
+
 ```
 
-* `User.php`
+### Responsibilities
 
-  * Domain model
-  * Represents business state
-  * No workflows
-  * No persistence logic
-  * Small helper behavior only
+**User.php**
+* Domain state
+* Small helper behavior only
+* No workflows
+* No persistence logic
 
-* `UserFields.php`
+**UserFields.php**
+* Field definitions
+* Types, defaults, constraints
+* Used for migrations and validation
 
-  * Field definitions
-  * Types, defaults, constraints
-  * Used for migrations and validation
-
-* `UserRelations.php`
-
-  * Domain relations (hasMany, belongsTo, etc.)
+**UserRelations.php**
+* Domain relationships
+* No queries or side effects
 
 ---
 
-## Repositories (Persistence boundary)
+## Repositories (persistence boundary)
 
-Repositories are split to **force architectural discipline** between reads and writes.
+Repositories are split to **enforce read/write discipline**.
 
 ```
+
 Domains/Users/Repositories/
-  Queries/
-    UserQueryRepository.php
-  Commands/
-    UserCommandRepository.php
+Queries/
+UserQueryRepository.php
+Commands/
+UserCommandRepository.php
+
 ```
 
-### Repository rules (strict)
+### Repository rules
 
-* `*QueryRepository`
+**Query repositories**
+* SELECT only
+* No mutations
+* No side effects
 
-  * may only execute **SELECT / read operations**
-  * must never modify state
+**Command repositories**
+* INSERT / UPDATE / DELETE only
+* No arbitrary reads
 
-* `*CommandRepository`
+**All repositories**
+* Hide SQL / ORM details
+* Return models or DTOs
+* Contain zero business logic
 
-  * may only execute **INSERT / UPDATE / DELETE**
-  * must never return arbitrary query results
-
-* Repositories:
-
-  * encapsulate **all persistence logic**
-  * hide SQL / ORM / storage details
-  * return domain models or DTOs
-  * contain **no business logic**
-
-* Services MUST NOT:
-
-  * write SQL
-  * use query builders directly
-  * talk to the database
+Services must never:
+* write SQL
+* use query builders directly
+* access the database
 
 ---
 
-## Service → Repository usage rules (enforced)
+## Services (use cases)
 
 ```
-Services/Queries   → QueryRepositories ONLY
-Services/Commands  → CommandRepositories (and QueryRepositories if needed)
-```
 
-* Query services:
-
-  * read-only
-  * may not cause side effects
-  * may only depend on `*QueryRepository`
-
-* Command services:
-
-  * perform mutations
-  * may depend on:
-
-    * `*QueryRepository` (for checks, lookups)
-    * `*CommandRepository` (for writes)
-
-This split enables:
-
-* mechanical enforcement
-* static analysis
-* optional read-only DB connections
-* consistent mental model
-
----
-
-## Migrations
-
-```
-Domains/Users/Migrations/
-  2026_01_16_000001_create_users.php
-```
-
-* Domain-scoped migrations
-* Generated from model field definitions
-* Loaded automatically by the framework
-
----
-
-## Policies & Gates (Domain middleware)
-
-```
-Domains/Users/Policies/
-  UsersPolicy.php
-  Gates/
-    CanCreateUser.php
-    CanInviteUser.php
-```
-
-* Policies act as **mandatory middleware**
-* No domain code executes unless its policy passes
-* Gates are fine-grained permission checks
-* Enforced on:
-
-  * component GET
-  * component POST
-  * service execution
-
----
-
-## Validators
-
-```
-Domains/Users/Validators/
-  CreateUserValidator.php
-```
-
-* Optional domain-level validation helpers
-* Used by services for business rule validation
-* Not tied to HTTP or UI
-
----
-
-## Services (Use cases)
-
-```
 Domains/Users/Services/
-  Commands/
-    CreateUserService.php
-    CreateUserData.php
-    CreateUserResult.php
+Queries/
+GetUserProfileService.php
+GetUserProfileQuery.php
+GetUserProfileResult.php
 
-  Queries/
-    GetUserProfileService.php
-    GetUserProfileQuery.php
-    GetUserProfileResult.php
+Commands/
+CreateUserService.php
+CreateUserData.php
+CreateUserResult.php
+
 ```
 
 ### Service rules
 
 * One service = one use case
-* Services contain business workflows
 * Services:
-
   * accept DTOs
+  * orchestrate workflows
   * call repositories
-  * enforce business rules
 * Services do NOT:
+  * depend on HTTP
+  * depend on UI
+  * perform authorization manually
+  * return domain models
 
-  * return models directly
-  * depend on UI or HTTP
-  * perform authorization checks manually (policies handle this)
-Below is an **additional section** you can paste into the README.
-It fits logically **after the “DTO conventions (mandatory)” section**, because it explains *why* the DTO types exist.
+Authorization is enforced **before** services run.
 
 ---
 
-## Why different DTO types exist
+## DTOs (mandatory)
 
-Lilly deliberately distinguishes between **Action Input DTOs**, **Service Command Data DTOs**, **Service Query DTOs**, and **Props DTOs**.
-This separation is intentional and enforces architectural boundaries.
+DTOs exist to **cut dependencies** and **clarify intent**.
 
-The difference is **intent**, not syntax.
+### DTO types
+
+| Type           | Location                                  | Purpose |
+|----------------|-------------------------------------------|---------|
+| Props          | `Components/*/Props.php`                  | GET configuration |
+| Action Input   | `Components/*/Actions/*Input.php`         | POST input |
+| Service Data   | `Domains/*/Services/*Data.php`            | Command intent |
+| Service Query  | `Domains/*/Services/*Query.php`           | Read intent |
+| Service Result | `Domains/*/Services/*Result.php`          | Output |
+
+### Global DTO rules
+
+* `readonly`
+* immutable
+* typed
+* validation lives inside the DTO
+* no framework access
+* no database access
 
 ---
 
 ## Command Data DTO (`*Data.php`)
 
-Location:
-
-```
-Domains/*/Services/Commands/*Data.php
-```
-
-### Purpose
-
 Represents an **intent to change state**.
 
-> “I want to do something.”
-
 Examples:
+* create user
+* update email
+* invite member
 
-* create a user
-* update an email
-* invite a member
-* delete a team
-
-### Characteristics
-
-* Causes side effects
-* Used only by **command services**
-* May fail due to business rules
-* Always paired with a command service
-* Usually returns a `*Result.php`
-
-### Rules
-
-* Immutable
-* Typed
-* No validation of business rules
-* No persistence logic
-* No framework or UI dependencies
+Characteristics:
+* causes side effects
+* used only by command services
+* may fail due to business rules
+* usually returns a `*Result.php`
 
 ---
 
 ## Query DTO (`*Query.php`)
 
-Location:
-
-```
-Domains/*/Services/Queries/*Query.php
-```
-
-### Purpose
-
 Represents an **intent to read state**.
 
-> “I want to see something.”
-
-Examples:
-
-* get user profile
-* list users
-* find team members
-
-### Characteristics
-
-* Must be **read-only**
-* Must never cause side effects
-* Safe to repeat
-* Safe to cache
-* Used only by **query services**
-
-### Rules
-
-* Immutable
-* Typed
-* No persistence logic
-* No business rules
-* No framework or UI dependencies
+Characteristics:
+* read-only
+* no side effects
+* safe to cache
+* safe to repeat
 
 ---
 
-## Why Command Data and Query DTOs are different
+## Why commands and queries are separate
 
-They represent **fundamentally different intents**.
+They represent **different guarantees**.
 
-| Aspect                 | Command Data | Query      |
-| ---------------------- | ------------ | ---------- |
-| Purpose                | Change state | Read state |
-| Side effects           | Yes          | No         |
-| Writes data            | Yes          | No         |
-| Safe to cache          | No           | Yes        |
-| Requires authorization | Yes          | Yes        |
-| Causes transactions    | Often        | Never      |
+| Aspect       | Command | Query |
+|-------------|---------|-------|
+| Mutates     | Yes     | No    |
+| Cacheable   | No      | Yes   |
+| Side effects| Yes     | No    |
+| Transactions| Often   | Never |
 
-Keeping them separate allows:
-
-* mechanical enforcement of read vs write
-* optional read-only DB connections
-* safer caching strategies
-* clearer mental models
-* prevention of accidental mutations in queries
+This enables:
+* read-only DB connections
+* static enforcement
+* safer caching
+* simpler mental models
 
 ---
 
 ## Action Input DTO (`*Input.php`)
 
 Location:
-
 ```
+
 Components/*/Actions/*Input.php
+
 ```
 
-### Purpose
+Purpose:
+* represent raw HTTP input
+* validate shape
+* normalize values
 
-Represents **raw input coming from HTTP**.
-
-> “This is what the user submitted.”
-
-### Responsibilities
-
-* Parse HTTP request data
-* Validate **shape**
-* Normalize values (trim, lowercase, cast types)
-
-### Characteristics
-
-* Tied to transport (HTTP)
-* Tied to UI
-* Not reusable across domains
-* Not reusable across services
-
-### Validation here includes
-
+Includes:
 * required fields
-* string length
-* format (email, uuid, etc.)
+* formats
+* basic constraints
 
-### Validation here does NOT include
-
+Excludes:
 * uniqueness checks
 * permission checks
-* cross-entity business rules
+* cross-entity rules
 
-Action Input DTOs exist to **protect the domain from the UI**.
+Action inputs protect the domain from the UI.
 
 ---
 
 ## Props DTO (`Props.php`)
 
-Location:
+Purpose:
+* component configuration
+* not user input
 
-```
-Components/*/Props.php
-```
+Examples:
+* labels
+* IDs
+* flags
+* redirect targets
 
-### Purpose
-
-Represents **component configuration**, not user input.
-
-> “How should this component render or behave?”
-
-### Examples
-
-* button label
-* redirect URL
-* feature flags
-* IDs needed to render data
-
-### Characteristics
-
-* Used only for GET rendering
-* Immutable
-* No side effects
-* No persistence
-* No business rules
-
-Props are **not** user interaction.
-They are **component setup**.
+Props are **not interaction**.
+They are **setup**.
 
 ---
 
-## Full lifecycle overview
+## Request lifecycle
 
 ### POST (mutation)
 
 ```
-HTTP Request
-  ↓
-Action Input DTO        (transport shape)
-  ↓
-Service Command Data    (business intent)
-  ↓
+
+HTTP request
+↓
+Action Input DTO
+↓
+Service Command Data
+↓
 Command Service
-  ↓
+↓
 Repositories
+
 ```
 
 ### GET (read)
 
 ```
-HTTP Request
-  ↓
-Props DTO               (component configuration)
-  ↓
-Query DTO               (read intent)
-  ↓
+
+HTTP request
+↓
+Props DTO
+↓
+Query DTO
+↓
 Query Service
-  ↓
+↓
 Repositories
+
 ```
 
-Each DTO exists to **cut a dependency**:
-
-* UI never leaks into domain
-* transport never leaks into services
-* read logic never leaks into write logic
+Each step removes a dependency.
 
 ---
 
-## Domain Routes
+## Routing
+
+### Domain routes
 
 ```
-Domains/Users/Routes/
-  web.php
-  api.php
-  components.php
+
+Domains/<Domain>/Routes/
+web.php
+api.php
+components.php
+
 ```
 
-* Optional domain-specific routes
-* Component routes are handled by the framework
-* These files are auto-loaded per domain
+Each file:
+* must return a callable
+* receives a `DomainRouter`
+* automatically enforces domain policies
 
 ---
 
-## Domain Components (Single-domain islands)
+### Cross-domain routes
+
+Cross-domain components live in:
 
 ```
+
+src/App/CrossComponents/
+teams+users/
+InviteUserToTeam/
+
+```
+
+Rules:
+* folder name is the domain signature
+* lowercase
+* alphabetical
+* joined with `+`
+
+Routes use `CrossDomainRouter` and enforce **all involved domain policies**.
+
+---
+
+## Components (islands)
+
+### Single-domain component
+
+```
+
 Domains/Users/Components/AddUserButton/
-  Component.php
-  Props.php
-
-  Actions/
-    CreateUser.php
-    CreateUserInput.php
-
-  View/
-    view.php
-    fragments/
-
-  Assets/
-    component.ts
-    component.css
-
-  Tests/
-    RenderTest.php
-    CreateUserActionTest.php
-```
-
-### Domain component rules
-
-* Must touch **exactly one domain**
-* Domain is inferred from folder location
-* Domain policy is enforced automatically
-* Component ID is derived from path:
-
-  * `users.add-user-button`
-
----
-
-## Component parts explained
-
-### Component.php
-
-* Entry point
-* Declares hydrate mode
-* Maps actions
-* Calls domain services
-* No business logic
-
-### Props.php (DTO)
-
-* Typed configuration for GET render
-* Validation rules live **inside the class**
-* Immutable
-
-### Actions/*
-
-* One file per POST action
-
-#### CreateUserInput.php (DTO)
-
-* Typed POST body
-* Validation rules **inside the class**
-* Shape validation only (no DB checks)
-
-#### CreateUser.php
-
-* Orchestrates action
-* Calls domain services
-* Maps results to UI responses
-
-### View/
-
-* Server-rendered HTML
-* No services
-* No validation
-* No side effects
-
-### Assets/
-
-* Optional hydration
-* Scoped to the island root
-* No global selectors
-
-### Tests/
-
-* Integration level
-* Rendering works
-* Actions return correct responses
-* Policies enforced
-
----
-
-## UI folder (Non-domain components)
+Component.php
+Props.php
+Actions/
+View/
+Assets/
+Tests/
 
 ```
-UI/
-  SharedComponents/
-  CrossComponents/
+
+Rules:
+* touches exactly one domain
+* domain inferred from folder
+* policy enforced automatically
+
+Component ID:
+```
+
+users.add-user-button
+
 ```
 
 ---
 
-## SharedComponents (0 domains)
+### Cross-domain component
 
 ```
-UI/SharedComponents/ConfirmDialog/
+
+App/CrossComponents/teams+users/InviteUserToTeam/
+
 ```
 
-* Touches no domain
-* Pure UI behavior
-* No domain policies
+Component ID:
+```
+
+cross.teams+users.invite-user-to-team
+
+```
 
 ---
 
-## CrossComponents (2+ domains)
+## Component parts
 
-```
-UI/CrossComponents/teams+users/InviteUserToTeam/
-```
+**Component.php**
+* entry point
+* wiring only
+* no business logic
 
-### CrossComponent rules
+**Actions/**
+* one class per POST action
 
-* Folder name is **domain signature**
+**View/**
+* server-rendered HTML
+* no services
+* no side effects
 
-  * alphabetical
-  * lowercase
-  * joined with `+`
-* Component must touch **exactly those domains**
-* Component ID example:
-
-  * `cross.teams+users.invite-user-to-team`
+**Assets/**
+* optional hydration
+* scoped
+* no globals
 
 ---
 
-## DTO rules (global)
+## Security model
 
-DTOs are used everywhere for consistency.
+### Domain policies
 
-### Types of DTOs
+Each domain must define:
 
-| Type           | Location                          | Purpose           |
-| -------------- | --------------------------------- | ----------------- |
-| Props          | `Components/*/Props.php`          | GET configuration |
-| Action Input   | `Components/*/Actions/*Input.php` | POST body         |
-| Service Data   | `Domains/*/Services/*Data.php`     | Service input     |
-| Service Result | `Domains/*/Services/*Result.php`   | Service output    |
+```
 
-### DTO rules
+Domains/<Domain>/Policies/<Domain>Policy.php
 
-* `readonly`
-* immutable
-* typed
-* validation rules live **inside the DTO**
-* no framework or DB access
+```
+
+Rules:
+* mandatory
+* auto-discovered
+* enforced on every request
+
+If missing, the application fails at runtime.
+
+---
+
+### Gates
+
+```
+
+Domains/<Domain>/Policies/Gates/*.php
+
+```
+
+* fine-grained permissions
+* referenced by name on routes
+* enforced after domain policies
 
 ---
 
 ## Testing rules
 
-* Every **query repository** has tests
-* Every **command repository** has tests
-* Every **command service** has a test
-* Every **component** has:
-
+* Every repository has tests
+* Every command service has tests
+* Every component has:
   * render test
-  * action test (if it has actions)
-* No duplicated business logic tests in components
+  * action test
+* No duplicated business logic tests
 
 ---
 
-## Core philosophy
+## CLI tooling
 
-Lilly is **opinionated by design**.
+Available commands:
 
-* Structure is enforced
-* Patterns are mandatory
-* Escape hatches are explicit
-* Consistency beats flexibility
+```
 
-The result:
+shape:domain:make <Domain>
+shape:domain:remove <Domain>
 
-* predictable codebases
-* fast onboarding
-* fewer architectural debates
+shape:cross:make <Component> <DomainA> <DomainB> [...]
+shape:cross:remove <Component>
+
+```
+
+Scaffolding is the only supported way to create structure.
+
+---
+
+## Philosophy
+
+Lilly is intentionally strict.
+
+You trade:
+* flexibility
+for
+* consistency
+* predictability
 * safer refactors
+* faster onboarding
+
+If something feels rigid, that is by design.
 
 Only the business logic should differ.
+```
+
+---
