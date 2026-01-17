@@ -32,7 +32,7 @@ final class RemoveDomainCommand extends Command
             (string)$input->getArgument('name')
         );
 
-        $domainRoot = $this->projectRoot . '/src/Domain/' . $domain;
+        $domainRoot = $this->projectRoot . '/src/Domains/' . $domain;
 
         if (!is_dir($domainRoot)) {
             $output->writeln("<error>Domain does not exist:</error> {$domain}");

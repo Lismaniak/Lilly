@@ -28,7 +28,7 @@ final class MakeDomainCommand extends Command
         $nameRaw = (string) $input->getArgument('name');
         $domain = $this->normalizeDomainName($nameRaw);
 
-        $domainRoot = $this->projectRoot . '/src/Domain/' . $domain;
+        $domainRoot = $this->projectRoot . '/src/Domains/' . $domain;
 
         if (is_dir($domainRoot)) {
             $output->writeln("<error>Domain already exists:</error> {$domain}");
