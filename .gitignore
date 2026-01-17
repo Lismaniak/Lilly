@@ -9,6 +9,9 @@
 .env
 .env.*.local
 
+# Composer
+/vendor/
+
 # Logs
 *.log
 
@@ -18,3 +21,4 @@
 
 # Coverage
 coverage/
+
