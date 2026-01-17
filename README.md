@@ -28,7 +28,7 @@ src/
 Each domain is a **bounded context** and contains everything related to that domain.
 
 ```
-Domain/<DomainName>/
+Domains/<DomainName>/
   Models/
   Repositories/
   Migrations/
@@ -54,7 +54,7 @@ Domain/<DomainName>/
 ## Models
 
 ```
-Domain/Users/Models/
+Domains/Users/Models/
   User.php
   UserFields.php
   UserRelations.php
@@ -85,7 +85,7 @@ Domain/Users/Models/
 Repositories are split to **force architectural discipline** between reads and writes.
 
 ```
-Domain/Users/Repositories/
+Domains/Users/Repositories/
   Queries/
     UserQueryRepository.php
   Commands/
@@ -152,7 +152,7 @@ This split enables:
 ## Migrations
 
 ```
-Domain/Users/Migrations/
+Domains/Users/Migrations/
   2026_01_16_000001_create_users.php
 ```
 
@@ -165,7 +165,7 @@ Domain/Users/Migrations/
 ## Policies & Gates (Domain middleware)
 
 ```
-Domain/Users/Policies/
+Domains/Users/Policies/
   UsersPolicy.php
   Gates/
     CanCreateUser.php
@@ -186,7 +186,7 @@ Domain/Users/Policies/
 ## Validators
 
 ```
-Domain/Users/Validators/
+Domains/Users/Validators/
   CreateUserValidator.php
 ```
 
@@ -199,7 +199,7 @@ Domain/Users/Validators/
 ## Services (Use cases)
 
 ```
-Domain/Users/Services/
+Domains/Users/Services/
   Commands/
     CreateUserService.php
     CreateUserData.php
@@ -244,7 +244,7 @@ The difference is **intent**, not syntax.
 Location:
 
 ```
-Domain/*/Services/Commands/*Data.php
+Domains/*/Services/Commands/*Data.php
 ```
 
 ### Purpose
@@ -283,7 +283,7 @@ Examples:
 Location:
 
 ```
-Domain/*/Services/Queries/*Query.php
+Domains/*/Services/Queries/*Query.php
 ```
 
 ### Purpose
@@ -457,7 +457,7 @@ Each DTO exists to **cut a dependency**:
 ## Domain Routes
 
 ```
-Domain/Users/Routes/
+Domains/Users/Routes/
   web.php
   api.php
   components.php
@@ -472,7 +472,7 @@ Domain/Users/Routes/
 ## Domain Components (Single-domain islands)
 
 ```
-Domain/Users/Components/AddUserButton/
+Domains/Users/Components/AddUserButton/
   Component.php
   Props.php
 
@@ -610,8 +610,8 @@ DTOs are used everywhere for consistency.
 | -------------- | --------------------------------- | ----------------- |
 | Props          | `Components/*/Props.php`          | GET configuration |
 | Action Input   | `Components/*/Actions/*Input.php` | POST body         |
-| Service Data   | `Domain/*/Services/*Data.php`     | Service input     |
-| Service Result | `Domain/*/Services/*Result.php`   | Service output    |
+| Service Data   | `Domains/*/Services/*Data.php`     | Service input     |
+| Service Result | `Domains/*/Services/*Result.php`   | Service output    |
 
 ### DTO rules
 
