@@ -21,7 +21,12 @@ final class Kernel
     public function handle(Request $request): Response
     {
         try {
-            $route = $this->router->match($request);
+            $matched = $this->router->match($request);
+            $route = $matched->route;
+
+            foreach ($matched->params as $key => $value) {
+                $request = $request->withAttribute($key, $value);
+            }
         } catch (RuntimeException $e) {
             return Response::text("404 Not Found\n" . $e->getMessage() . "\n", 404);
         }
@@ -126,9 +131,9 @@ final class Kernel
 
     /**
      * Convention:
-     * src/UI/CrossComponents/<signature>/Routes/web.php
-     * src/UI/CrossComponents/<signature>/Routes/api.php
-     * src/UI/CrossComponents/<signature>/Routes/components.php
+     * src/App/CrossComponents/<signature>/Routes/web.php
+     * src/App/CrossComponents/<signature>/Routes/api.php
+     * src/App/CrossComponents/<signature>/Routes/components.php
      *
      * signature example:
      * teams+users
@@ -137,7 +142,7 @@ final class Kernel
      */
     private function registerCrossComponentRoutes(Router $router): void
     {
-        $root = $this->projectRoot . '/src/UI/CrossComponents';
+        $root = $this->projectRoot . '/src/App/CrossComponents';
 
         if (!is_dir($root)) {
             return;

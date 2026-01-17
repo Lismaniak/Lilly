@@ -22,60 +22,23 @@ final readonly class Request
 
     public static function fromGlobals(): self
     {
-        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
-        $uri = $_SERVER['REQUEST_URI'] ?? '/';
+        $uri = (string)($_SERVER['REQUEST_URI'] ?? '/');
         $path = parse_url($uri, PHP_URL_PATH);
         if (!is_string($path) || $path === '') {
             $path = '/';
         }
 
-        $headers = [];
-        foreach ($_SERVER as $key => $value) {
-            if (!is_string($value)) {
-                continue;
-            }
+        $headers = self::collectHeaders($_SERVER);
 
-            if (str_starts_with($key, 'HTTP_')) {
-                $name = str_replace('_', '-', strtolower(substr($key, 5)));
-                $headers[$name] = $value;
-            }
-        }
+        $query = self::collectQuery($_GET);
 
-        $query = [];
-        foreach ($_GET as $k => $v) {
-            if (is_string($k)) {
-                $query[$k] = is_scalar($v) ? $v : null;
-            }
-        }
-
-        $body = [];
         $contentType = $headers['content-type'] ?? '';
-        $raw = file_get_contents('php://input');
-
-        if (is_string($raw) && $raw !== '') {
-            if (str_contains($contentType, 'application/json')) {
-                $decoded = json_decode($raw, true);
-                if (is_array($decoded)) {
-                    $body = $decoded;
-                }
-            } else {
-                foreach ($_POST as $k => $v) {
-                    if (is_string($k)) {
-                        $body[$k] = $v;
-                    }
-                }
-            }
-        } else {
-            foreach ($_POST as $k => $v) {
-                if (is_string($k)) {
-                    $body[$k] = $v;
-                }
-            }
-        }
+        $body = self::collectBody($method, $contentType, $_POST);
 
         return new self(
-            method: strtoupper($method),
+            method: $method,
             path: $path,
             headers: $headers,
             query: $query,
@@ -118,5 +81,136 @@ final readonly class Request
     public function attribute(string $key, mixed $default = null): mixed
     {
         return $this->attributes[$key] ?? $default;
+    }
+
+    /**
+     * @param array<string, mixed> $server
+     * @return array<string, string>
+     */
+    private static function collectHeaders(array $server): array
+    {
+        $headers = [];
+
+        foreach ($server as $key => $value) {
+            if (!is_string($key) || !is_string($value)) {
+                continue;
+            }
+
+            if (str_starts_with($key, 'HTTP_')) {
+                $name = strtolower(str_replace('_', '-', substr($key, 5)));
+                $headers[$name] = $value;
+                continue;
+            }
+
+            // Non-HTTP_ headers that PHP exposes separately
+            if ($key === 'CONTENT_TYPE') {
+                $headers['content-type'] = $value;
+                continue;
+            }
+
+            if ($key === 'CONTENT_LENGTH') {
+                $headers['content-length'] = $value;
+                continue;
+            }
+        }
+
+        return $headers;
+    }
+
+    /**
+     * @param array<string, mixed> $get
+     * @return array<string, string|int|float|bool|null>
+     */
+    private static function collectQuery(array $get): array
+    {
+        $query = [];
+
+        foreach ($get as $k => $v) {
+            if (!is_string($k)) {
+                continue;
+            }
+
+            $query[$k] = is_scalar($v) ? $v : null;
+        }
+
+        return $query;
+    }
+
+    /**
+     * Rules:
+     * - application/json: parse php://input for any method
+     * - application/x-www-form-urlencoded:
+     *     - if PHP filled $_POST (usually POST), use it
+     *     - else parse php://input (PUT/PATCH/DELETE)
+     * - multipart/form-data: rely on $_POST (PHP handles it)
+     * - anything else: empty array
+     *
+     * @param array<string, mixed> $post
+     * @return array<string, mixed>
+     */
+    private static function collectBody(string $method, string $contentType, array $post): array
+    {
+        $contentType = strtolower(trim(explode(';', $contentType, 2)[0] ?? ''));
+
+        if ($contentType === '') {
+            return $method === 'POST' ? self::sanitizeBodyArray($post) : [];
+        }
+
+        if ($contentType === 'application/json') {
+            $raw = self::readRawBody();
+            if ($raw === '') {
+                return [];
+            }
+
+            $decoded = json_decode($raw, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        if ($contentType === 'application/x-www-form-urlencoded') {
+            if ($post !== []) {
+                return self::sanitizeBodyArray($post);
+            }
+
+            $raw = self::readRawBody();
+            if ($raw === '') {
+                return [];
+            }
+
+            $data = [];
+            parse_str($raw, $data);
+
+            return is_array($data) ? $data : [];
+        }
+
+        if ($contentType === 'multipart/form-data') {
+            return self::sanitizeBodyArray($post);
+        }
+
+        return $method === 'POST' ? self::sanitizeBodyArray($post) : [];
+    }
+
+    private static function readRawBody(): string
+    {
+        $raw = file_get_contents('php://input');
+        return is_string($raw) ? $raw : '';
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private static function sanitizeBodyArray(array $data): array
+    {
+        $out = [];
+
+        foreach ($data as $k => $v) {
+            if (!is_string($k)) {
+                continue;
+            }
+
+            $out[$k] = $v;
+        }
+
+        return $out;
     }
 }
