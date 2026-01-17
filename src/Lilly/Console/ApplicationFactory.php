@@ -9,6 +9,8 @@ use Lilly\Console\Commands\MakeAppGateCommand;
 use Lilly\Console\Commands\MakeAppPolicyCommand;
 use Lilly\Console\Commands\MakeGateCommand;
 use Lilly\Console\Commands\RemoveAppComponentCommand;
+use Lilly\Console\Commands\RemoveAppGateCommand;
+use Lilly\Console\Commands\RemoveAppPolicyCommand;
 use Lilly\Console\Commands\RemoveCrossComponentCommand;
 use Lilly\Console\Commands\MakeCrossComponentCommand;
 use Lilly\Console\Commands\RemoveDomainCommand;
@@ -32,6 +34,8 @@ final class ApplicationFactory
         $app->addCommand(new RemoveAppComponentCommand(projectRoot: $projectRoot));
         $app->addCommand(new MakeAppPolicyCommand(projectRoot: $projectRoot));
         $app->addCommand(new MakeAppGateCommand(projectRoot: $projectRoot));
+        $app->addCommand(new RemoveAppPolicyCommand(projectRoot: $projectRoot));
+        $app->addCommand(new RemoveAppGateCommand(projectRoot: $projectRoot));
 
         return $app;
     }
