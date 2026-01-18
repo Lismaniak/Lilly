@@ -109,11 +109,14 @@ final class MigrationRunner
      * Discovers migrations for every domain.
      *
      * Convention:
-     * - src/Domains/<Domain>/Migrations/<table>/*.php
-     * - src/Domains/<Domain>/Migrations/owned/<table>/*.php
+     * - Domain table migrations live flat:
+     *   src/Domains/<Domain>/Migrations/*.php
+     *
+     * - Owned tables live scoped:
+     *   src/Domains/<Domain>/Migrations/owned/<table>/*.php
      *
      * Migration name is stable and includes the relative path:
-     * - <Domain>/<table>/<file>.php
+     * - <Domain>/<file>.php
      * - <Domain>/owned/<table>/<file>.php
      *
      * @return array<string, string> [migrationName => absolutePath]
@@ -151,23 +154,56 @@ final class MigrationRunner
                 continue;
             }
 
-            // 1) Normal tables: Migrations/<table>/*.php
-            $this->collectTableMigrations(
-                files: $files,
-                domain: $domain,
-                baseDir: $migrationsRoot,
-                namePrefix: $domain
-            );
+            // 1) Flat domain migrations: Migrations/*.php (ignore directories)
+            $flat = glob($migrationsRoot . '/*.php');
+            if ($flat !== false) {
+                foreach ($flat as $path) {
+                    $file = basename($path);
+                    if ($file === '' || !str_ends_with($file, '.php')) {
+                        continue;
+                    }
 
-            // 2) Owned subfolder: Migrations/owned/<table>/*.php
+                    $name = $domain . '/' . $file;
+                    $files[$name] = $path;
+                }
+            }
+
+            // 2) Owned migrations: Migrations/owned/<table>/*.php
             $ownedRoot = $migrationsRoot . '/owned';
             if (is_dir($ownedRoot)) {
-                $this->collectTableMigrations(
-                    files: $files,
-                    domain: $domain,
-                    baseDir: $ownedRoot,
-                    namePrefix: $domain . '/owned'
-                );
+                $tables = scandir($ownedRoot);
+                if ($tables === false) {
+                    continue;
+                }
+
+                foreach ($tables as $table) {
+                    if ($table === '.' || $table === '..') {
+                        continue;
+                    }
+                    if (str_starts_with($table, '.')) {
+                        continue;
+                    }
+
+                    $tableDir = $ownedRoot . '/' . $table;
+                    if (!is_dir($tableDir)) {
+                        continue;
+                    }
+
+                    $matches = glob($tableDir . '/*.php');
+                    if ($matches === false) {
+                        continue;
+                    }
+
+                    foreach ($matches as $path) {
+                        $file = basename($path);
+                        if ($file === '' || !str_ends_with($file, '.php')) {
+                            continue;
+                        }
+
+                        $name = $domain . '/owned/' . $table . '/' . $file;
+                        $files[$name] = $path;
+                    }
+                }
             }
         }
 

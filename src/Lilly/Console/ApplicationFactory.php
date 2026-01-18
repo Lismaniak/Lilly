@@ -10,6 +10,7 @@ use Lilly\Console\Commands\DbMigrateCommand;
 use Lilly\Console\Commands\DbTableMakeCommand;
 use Lilly\Console\Commands\DbTableRemoveCommand;
 use Lilly\Console\Commands\DbTableUpdateCommand;
+use Lilly\Console\Commands\DomainDbSyncCommand;
 use Lilly\Console\Commands\MakeAppComponentCommand;
 use Lilly\Console\Commands\MakeAppGateCommand;
 use Lilly\Console\Commands\MakeAppPolicyCommand;
@@ -47,6 +48,7 @@ final class ApplicationFactory
         $app->addCommand(new DbTableRemoveCommand(projectRoot: $projectRoot));
         $app->addCommand(new DbMigrateCommand(projectRoot: $projectRoot, config: $config));
         $app->addCommand(new DbFlushCommand(projectRoot: $projectRoot, config: $config));
+        $app->addCommand(new DomainDbSyncCommand(projectRoot: $projectRoot));
 
         return $app;
     }
