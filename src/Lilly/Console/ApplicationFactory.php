@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Lilly\Console;
 
 use Lilly\Config\Config;
+use Lilly\Console\Commands\DbFlushCommand;
+use Lilly\Console\Commands\DbMigrateCommand;
 use Lilly\Console\Commands\DbTableMakeCommand;
 use Lilly\Console\Commands\DbTableRemoveCommand;
 use Lilly\Console\Commands\DbTableUpdateCommand;
@@ -43,6 +45,8 @@ final class ApplicationFactory
         $app->addCommand(new DbTableMakeCommand(projectRoot: $projectRoot));
         $app->addCommand(new DbTableUpdateCommand(projectRoot: $projectRoot));
         $app->addCommand(new DbTableRemoveCommand(projectRoot: $projectRoot));
+        $app->addCommand(new DbMigrateCommand(projectRoot: $projectRoot, config: $config));
+        $app->addCommand(new DbFlushCommand(projectRoot: $projectRoot, config: $config));
 
         return $app;
     }

@@ -106,17 +106,27 @@ final class MigrationRunner
     }
 
     /**
+     * Discovers migrations for every domain.
+     *
+     * Convention:
+     * - src/Domains/<Domain>/Migrations/<table>/*.php
+     * - src/Domains/<Domain>/Migrations/owned/<table>/*.php
+     *
+     * Migration name is stable and includes the relative path:
+     * - <Domain>/<table>/<file>.php
+     * - <Domain>/owned/<table>/<file>.php
+     *
      * @return array<string, string> [migrationName => absolutePath]
      */
     private function discoverMigrationFiles(): array
     {
-        $root = $this->projectRoot . '/src/Domains';
+        $domainsRoot = $this->projectRoot . '/src/Domains';
 
-        if (!is_dir($root)) {
+        if (!is_dir($domainsRoot)) {
             return [];
         }
 
-        $domains = scandir($root);
+        $domains = scandir($domainsRoot);
         if ($domains === false) {
             return [];
         }
@@ -131,26 +141,84 @@ final class MigrationRunner
                 continue;
             }
 
-            $dir = $root . '/' . $domain . '/Migrations';
-            if (!is_dir($dir)) {
+            $domainDir = $domainsRoot . '/' . $domain;
+            if (!is_dir($domainDir)) {
                 continue;
             }
 
-            $matches = glob($dir . '/*.php');
+            $migrationsRoot = $domainDir . '/Migrations';
+            if (!is_dir($migrationsRoot)) {
+                continue;
+            }
+
+            // 1) Normal tables: Migrations/<table>/*.php
+            $this->collectTableMigrations(
+                files: $files,
+                domain: $domain,
+                baseDir: $migrationsRoot,
+                namePrefix: $domain
+            );
+
+            // 2) Owned subfolder: Migrations/owned/<table>/*.php
+            $ownedRoot = $migrationsRoot . '/owned';
+            if (is_dir($ownedRoot)) {
+                $this->collectTableMigrations(
+                    files: $files,
+                    domain: $domain,
+                    baseDir: $ownedRoot,
+                    namePrefix: $domain . '/owned'
+                );
+            }
+        }
+
+        ksort($files);
+        return $files;
+    }
+
+    /**
+     * Collects migrations from:
+     * - <baseDir>/<table>/*.php
+     *
+     * Writes keys as:
+     * - <namePrefix>/<table>/<file>
+     *
+     * @param array<string, string> $files
+     */
+    private function collectTableMigrations(array &$files, string $domain, string $baseDir, string $namePrefix): void
+    {
+        $tables = scandir($baseDir);
+        if ($tables === false) {
+            return;
+        }
+
+        foreach ($tables as $table) {
+            if ($table === '.' || $table === '..') {
+                continue;
+            }
+            if (str_starts_with($table, '.')) {
+                continue;
+            }
+
+            $tableDir = $baseDir . '/' . $table;
+            if (!is_dir($tableDir)) {
+                continue;
+            }
+
+            $matches = glob($tableDir . '/*.php');
             if ($matches === false) {
                 continue;
             }
 
             foreach ($matches as $path) {
-                $name = $domain . '/' . basename($path);
+                $file = basename($path);
+                if ($file === '' || !str_ends_with($file, '.php')) {
+                    continue;
+                }
 
+                $name = $namePrefix . '/' . $table . '/' . $file;
                 $files[$name] = $path;
             }
         }
-
-        ksort($files);
-
-        return $files;
     }
 
     /**
@@ -211,7 +279,10 @@ final class MigrationRunner
 
     private function markApplied(PDO $pdo, string $name, int $batch): void
     {
-        $stmt = $pdo->prepare('INSERT INTO lilly_migrations (name, batch, applied_at) VALUES (:name, :batch, :applied_at)');
+        $stmt = $pdo->prepare(
+            'INSERT INTO lilly_migrations (name, batch, applied_at) VALUES (:name, :batch, :applied_at)'
+        );
+
         $ok = $stmt->execute([
             ':name' => $name,
             ':batch' => $batch,

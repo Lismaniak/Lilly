@@ -6,6 +6,7 @@ namespace Lilly\Console\Commands;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class DbTableRemoveCommand extends Command
@@ -19,16 +20,21 @@ final class DbTableRemoveCommand extends Command
     protected function configure(): void
     {
         $this
-            ->setDescription('Scaffold a drop-table migration for a domain')
-            ->addArgument('domain', InputArgument::REQUIRED, 'Domain name, e.g. Users');
+            ->setDescription('Scaffold a drop-table migration for a domain-owned table')
+            ->addArgument('domain', InputArgument::REQUIRED, 'Domain name, e.g. Users')
+            ->addArgument('table', InputArgument::REQUIRED, 'Table name, e.g. user_emails')
+            ->addOption('owned', null, InputOption::VALUE_NONE, 'Use Domains/<Domain>/Migrations/owned/<table>');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $domain = $this->normalizeDomainName((string) $input->getArgument('domain'));
+        $table = $this->normalizeTableName((string) $input->getArgument('table'));
+        $owned = (bool) $input->getOption('owned');
 
-        if ($domain === '') {
-            $output->writeln('<error>Usage: db:table:remove <Domain></error>');
+        if ($domain === '' || $table === '') {
+            $output->writeln('<error>Usage: db:table:remove <Domain> <table> [--owned]</error>');
+            $output->writeln('<comment>Example: db:table:remove Users user_emails --owned</comment>');
             return Command::FAILURE;
         }
 
@@ -38,25 +44,27 @@ final class DbTableRemoveCommand extends Command
             return Command::FAILURE;
         }
 
-        $migrationsDir = "{$domainRoot}/Migrations";
-        if (!is_dir($migrationsDir)) {
-            mkdir($migrationsDir, 0777, true);
-            $output->writeln(' + dir  ' . $this->rel($migrationsDir));
+        $baseMigrationsDir = "{$domainRoot}/Migrations";
+        $tableDir = $owned
+            ? "{$baseMigrationsDir}/owned/{$table}"
+            : "{$baseMigrationsDir}/{$table}";
+
+        if (!is_dir($tableDir)) {
+            mkdir($tableDir, 0777, true);
+            $output->writeln(' + dir  ' . $this->rel($tableDir));
         }
 
-        $table = strtolower($domain);
-
-        $create = glob($migrationsDir . '/*_create_' . $table . '.php');
+        $create = glob($tableDir . '/*_create_' . $table . '.php');
         if ($create === false || count($create) === 0) {
-            $output->writeln("<error>No create-table migration found for domain {$domain}.</error>");
-            $output->writeln("<comment>Run: db:table:make {$domain}</comment>");
+            $output->writeln("<error>No create-table migration found for table '{$table}'.</error>");
+            $output->writeln("<comment>Run: db:table:make {$domain} {$table}" . ($owned ? ' --owned' : '') . "</comment>");
             return Command::FAILURE;
         }
 
         $stamp = gmdate('Y_m_d_His');
         $file = "{$stamp}_remove_{$table}.php";
+        $path = "{$tableDir}/{$file}";
 
-        $path = "{$migrationsDir}/{$file}";
         if (is_file($path)) {
             $output->writeln("<error>Migration already exists:</error> {$this->rel($path)}");
             return Command::FAILURE;
@@ -64,7 +72,7 @@ final class DbTableRemoveCommand extends Command
 
         file_put_contents($path, $this->stub($table));
         $output->writeln(' + file ' . $this->rel($path));
-        $output->writeln("<info>Created migration:</info> {$domain}/{$file}");
+        $output->writeln("<info>Created migration:</info> {$domain}/" . ($owned ? "owned/{$table}" : $table) . "/{$file}");
 
         return Command::SUCCESS;
     }
@@ -79,6 +87,18 @@ final class DbTableRemoveCommand extends Command
         $name = trim($name);
         $name = preg_replace('/[^A-Za-z0-9]/', '', $name) ?? '';
         return $name !== '' ? ucfirst($name) : '';
+    }
+
+    private function normalizeTableName(string $raw): string
+    {
+        $raw = trim($raw);
+        $raw = strtolower($raw);
+
+        $raw = preg_replace('/[^a-z0-9]+/', '_', $raw) ?? '';
+        $raw = preg_replace('/_+/', '_', $raw) ?? '';
+        $raw = trim($raw, '_');
+
+        return $raw;
     }
 
     private function rel(string $abs): string

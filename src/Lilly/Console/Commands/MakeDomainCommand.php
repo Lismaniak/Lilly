@@ -46,7 +46,7 @@ final class MakeDomainCommand extends Command
             'Models',
             'Repositories/Queries',
             'Repositories/Commands',
-            'Migrations',
+            'Migrations/owned',
             'Policies/Gates',
             'Validators',
             'Services/Commands',
@@ -62,6 +62,13 @@ final class MakeDomainCommand extends Command
         foreach ($dirs as $dir) {
             $this->mkdir($domainRoot . '/' . $dir, $output);
         }
+
+        // Domain definition model (DomainName.php)
+        $this->writeFile(
+            $domainRoot . "/Models/{$domain}.php",
+            $this->domainModelStub($domain),
+            $output
+        );
 
         $this->writeFile(
             $domainRoot . '/Routes/web.php',
@@ -109,7 +116,7 @@ final class MakeDomainCommand extends Command
     {
         $name = trim($name);
         $name = preg_replace('/[^A-Za-z0-9]/', '', $name) ?? '';
-        return ucfirst($name);
+        return $name !== '' ? ucfirst($name) : '';
     }
 
     private function mkdir(string $path, OutputInterface $output): void
@@ -159,5 +166,21 @@ final class MakeDomainCommand extends Command
     private function commandRepoStub(string $domain, string $domainKey): string
     {
         return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories\\Commands;\n\nfinal class {$domain}CommandRepository\n{\n    // Write repository for domain '{$domainKey}'\n    // Only INSERT/UPDATE/DELETE operations allowed\n}\n";
+    }
+
+    private function domainModelStub(string $domain): string
+    {
+        $domainKey = strtolower($domain);
+
+        // Dummy owned tables: these belong to the domain and reference domain table by <domain>_id.
+        // You can later delete them or replace with real ones.
+        $owned = [
+            "{$domainKey}_emails",
+            "{$domainKey}_names",
+        ];
+
+        $ownedExport = var_export($owned, true);
+
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Models;\n\n/**\n * Domain definition model.\n *\n * This class describes:\n * - the primary domain table (default: '{$domainKey}')\n * - owned tables that belong to this domain (one-domain only)\n *\n * Used by CLI tooling (migrations scaffolding, introspection).\n */\nfinal class {$domain}\n{\n    /**\n     * Override if the domain table name is not the default.\n     */\n    public static function table(): string\n    {\n        return '{$domainKey}';\n    }\n\n    /**\n     * Owned tables for this domain.\n     * These tables belong to this domain and must only reference this domain.\n     *\n     * @return list<string>\n     */\n    public static function ownedTables(): array\n    {\n        return {$ownedExport};\n    }\n}\n";
     }
 }
