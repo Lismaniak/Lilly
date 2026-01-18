@@ -26,3 +26,7 @@ coverage/
 src/Domains/
 src/App/
 
+# Runtime storage
+/var/*
+!/var/.gitkeep
+
