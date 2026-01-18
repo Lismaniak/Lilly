@@ -27,6 +27,11 @@ final class Blueprint
      */
     private array $changeColumns = [];
 
+    /**
+     * @var list<ForeignKey>
+     */
+    private array $foreignKeys = [];
+
     public function __construct(
         private readonly string $table,
         private readonly string $mode = 'create' // create|alter
@@ -81,6 +86,13 @@ final class Blueprint
         return $col;
     }
 
+    public function foreignId(string $name): Column
+    {
+        $c = new Column($name, 'id', nullable: false, unique: false, primary: false, autoIncrement: false);
+        $this->columns[] = $c;
+        return $c;
+    }
+
     public function string(string $name, int $length = 255): Column
     {
         $col = new Column($name, "string:{$length}");
@@ -95,7 +107,7 @@ final class Blueprint
         return $col;
     }
 
-    public function integer(string $name): Column
+    public function int(string $name): Column
     {
         $col = new Column($name, 'int');
         $this->columns[] = $col;
@@ -150,6 +162,25 @@ final class Blueprint
         $c = new ColumnChange($name !== '' ? $name : '__invalid__');
         $this->changeColumns[] = $c;
         return $c;
+    }
+
+    /**
+     * Add a foreign key definition.
+     */
+    public function foreign(string $column): ForeignKey
+    {
+        $column = trim($column);
+        $fk = new ForeignKey($column !== '' ? $column : '__invalid__');
+        $this->foreignKeys[] = $fk;
+        return $fk;
+    }
+
+    /**
+     * @return list<ForeignKey>
+     */
+    public function foreignKeys(): array
+    {
+        return $this->foreignKeys;
     }
 
     public function ensureHasColumnsForCreate(): void

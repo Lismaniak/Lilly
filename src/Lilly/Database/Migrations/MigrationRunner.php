@@ -37,27 +37,29 @@ final class MigrationRunner
 
         $batch = $this->nextBatchNumber($pdo);
 
-        $pdo->beginTransaction();
+        foreach ($pending as $name => $path) {
+            print "[migrate] {$name}\n";
+            if (function_exists('flush')) {
+                flush();
+            }
 
-        try {
-            foreach ($pending as $name => $path) {
-                $callable = require $path;
+            $callable = require $path;
 
-                if (!is_callable($callable)) {
-                    throw new RuntimeException("Migration file must return callable: {$path}");
-                }
+            if (!is_callable($callable)) {
+                throw new RuntimeException("Migration file must return callable: {$path}");
+            }
 
+            try {
                 $callable($pdo);
-
-                $this->markApplied($pdo, $name, $batch);
+            } catch (\Throwable $e) {
+                throw new RuntimeException(
+                    "Migration failed: {$name}\n{$path}\n" . $e->getMessage(),
+                    (int) $e->getCode(),
+                    $e
+                );
             }
 
-            $pdo->commit();
-        } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
+            $this->markApplied($pdo, $name, $batch);
         }
 
         return array_keys($pending);
@@ -98,14 +100,34 @@ final class MigrationRunner
 
     private function ensureMigrationsTable(PDO $pdo): void
     {
-        $pdo->exec(
-            "CREATE TABLE IF NOT EXISTS lilly_migrations (
+        $driver = strtolower((string) $pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
+
+        if ($driver === 'sqlite') {
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS lilly_migrations (
                 name TEXT PRIMARY KEY,
                 batch INTEGER NOT NULL,
                 applied_at TEXT NOT NULL
             )"
-        );
+            );
+            return;
+        }
+
+        if ($driver === 'mysql') {
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS lilly_migrations (
+                name VARCHAR(255) NOT NULL,
+                batch INT NOT NULL,
+                applied_at DATETIME NOT NULL,
+                PRIMARY KEY (name)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
+            return;
+        }
+
+        throw new RuntimeException("Unsupported driver '{$driver}'");
     }
+
 
     /**
      * Discovers migrations for every domain.
@@ -349,7 +371,7 @@ final class MigrationRunner
         $ok = $stmt->execute([
             ':name' => $name,
             ':batch' => $batch,
-            ':applied_at' => gmdate('c'),
+            ':applied_at' => gmdate('Y-m-d H:i:s'),
         ]);
 
         if ($ok !== true) {

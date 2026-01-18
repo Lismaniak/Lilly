@@ -25,8 +25,7 @@ final class MakeDomainCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $nameRaw = (string) $input->getArgument('name');
-        $domain = $this->normalizeDomainName($nameRaw);
+        $domain = $this->normalizeDomainName((string) $input->getArgument('name'));
 
         if ($domain === '') {
             $output->writeln('<error>Invalid domain name. Use letters/numbers only, e.g. Users</error>');
@@ -44,8 +43,7 @@ final class MakeDomainCommand extends Command
 
         $dirs = [
             'Models',
-            'Repositories/Queries',
-            'Repositories/Commands',
+            'Repositories',
             'Migrations/owned',
             'Policies/Gates',
             'Validators',
@@ -63,7 +61,8 @@ final class MakeDomainCommand extends Command
             $this->mkdir($domainRoot . '/' . $dir, $output);
         }
 
-        // Domain definition model (DomainName.php)
+        $domainKey = strtolower($domain);
+
         $this->writeFile(
             $domainRoot . "/Models/{$domain}.php",
             $this->domainModelStub($domain),
@@ -88,8 +87,6 @@ final class MakeDomainCommand extends Command
             $output
         );
 
-        $domainKey = strtolower($domain);
-
         $this->writeFile(
             $domainRoot . "/Policies/{$domain}Policy.php",
             $this->policyStub($domain, $domainKey),
@@ -97,13 +94,13 @@ final class MakeDomainCommand extends Command
         );
 
         $this->writeFile(
-            $domainRoot . "/Repositories/Queries/{$domain}QueryRepository.php",
+            $domainRoot . "/Repositories/{$domain}QueryRepository.php",
             $this->queryRepoStub($domain, $domainKey),
             $output
         );
 
         $this->writeFile(
-            $domainRoot . "/Repositories/Commands/{$domain}CommandRepository.php",
+            $domainRoot . "/Repositories/{$domain}CommandRepository.php",
             $this->commandRepoStub($domain, $domainKey),
             $output
         );
@@ -114,8 +111,7 @@ final class MakeDomainCommand extends Command
 
     private function normalizeDomainName(string $name): string
     {
-        $name = trim($name);
-        $name = preg_replace('/[^A-Za-z0-9]/', '', $name) ?? '';
+        $name = preg_replace('/[^A-Za-z0-9]/', '', trim($name)) ?? '';
         return $name !== '' ? ucfirst($name) : '';
     }
 
@@ -150,7 +146,7 @@ final class MakeDomainCommand extends Command
 
     private function routesComponentsStub(string $domain): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\DomainRouter;\n\nreturn function (DomainRouter \$router): void {\n    // Component route overrides for {$domain} (optional)\n};\n";
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\DomainRouter;\n\nreturn function (DomainRouter \$router): void {\n    // Component route overrides for {$domain}\n};\n";
     }
 
     private function policyStub(string $domain, string $domainKey): string
@@ -160,27 +156,39 @@ final class MakeDomainCommand extends Command
 
     private function queryRepoStub(string $domain, string $domainKey): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories\\Queries;\n\nfinal class {$domain}QueryRepository\n{\n    // Read-only repository for domain '{$domainKey}'\n    // Only SELECT operations allowed\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Models\\{$domain};\nuse Lilly\\Database\\Repositories\\AbstractRepository;\n\nfinal class {$domain}QueryRepository extends AbstractRepository\n{\n    protected function table(): string\n    {\n        return {$domain}::table();\n    }\n\n    protected function primaryKey(): string\n    {\n        return {$domain}::primaryKey();\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
     }
 
     private function commandRepoStub(string $domain, string $domainKey): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories\\Commands;\n\nfinal class {$domain}CommandRepository\n{\n    // Write repository for domain '{$domainKey}'\n    // Only INSERT/UPDATE/DELETE operations allowed\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Models\\{$domain};\nuse Lilly\\Database\\Repositories\\AbstractRepository;\n\nfinal class {$domain}CommandRepository extends AbstractRepository\n{\n    protected function table(): string\n    {\n        return {$domain}::table();\n    }\n\n    protected function primaryKey(): string\n    {\n        return {$domain}::primaryKey();\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
     }
 
     private function domainModelStub(string $domain): string
     {
         $domainKey = strtolower($domain);
+        $singular = str_ends_with($domainKey, 's') ? substr($domainKey, 0, -1) : $domainKey;
 
-        // Dummy owned tables: these belong to the domain and reference domain table by <domain>_id.
-        // You can later delete them or replace with real ones.
         $owned = [
             "{$domainKey}_emails",
             "{$domainKey}_names",
         ];
 
-        $ownedExport = var_export($owned, true);
+        $ownedLines = "            '" . implode("',\n            '", $owned) . "',";
 
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Models;\n\n/**\n * Domain definition model.\n *\n * This class describes:\n * - the primary domain table (default: '{$domainKey}')\n * - owned tables that belong to this domain (one-domain only)\n *\n * Used by CLI tooling (migrations scaffolding, introspection).\n */\nfinal class {$domain}\n{\n    /**\n     * Override if the domain table name is not the default.\n     */\n    public static function table(): string\n    {\n        return '{$domainKey}';\n    }\n\n    /**\n     * Owned tables for this domain.\n     * These tables belong to this domain and must only reference this domain.\n     *\n     * @return list<string>\n     */\n    public static function ownedTables(): array\n    {\n        return {$ownedExport};\n    }\n}\n";
+        $fkBlocks = [];
+        foreach ($owned as $table) {
+            $fkBlocks[] =
+                "            [\n" .
+                "                'table' => '{$table}',\n" .
+                "                'column' => '{$singular}_id',\n" .
+                "                'references' => ['table' => '{$domainKey}', 'column' => 'id'],\n" .
+                "                'onDelete' => 'cascade',\n" .
+                "            ]";
+        }
+
+        $fkLines = implode(",\n", $fkBlocks);
+
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Models;\n\n/**\n * Domain definition model.\n *\n * Used by CLI tooling (migrations scaffolding, introspection).\n */\nfinal class {$domain}\n{\n    public static function table(): string\n    {\n        return '{$domainKey}';\n    }\n\n    public static function primaryKey(): string\n    {\n        return 'id';\n    }\n\n    public static function idType(): string\n    {\n        return 'int';\n    }\n\n    public static function fromRow(array \$row): self\n    {\n        return new self();\n    }\n\n    public static function ownedTables(): array\n    {\n        return [\n{$ownedLines}\n        ];\n    }\n\n    public static function foreignKeys(): array\n    {\n        return [\n{$fkLines}\n        ];\n    }\n}\n";
     }
 }

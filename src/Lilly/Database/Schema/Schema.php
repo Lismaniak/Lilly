@@ -32,6 +32,10 @@ final class Schema
         $this->pdo->exec($sql);
 
         $this->applyUniqueIndexes($table, $t, $driver);
+
+        if ($t->foreignKeys() !== []) {
+            $this->applyForeignKeys($table, $t, $driver, 'create');
+        }
     }
 
     /**
@@ -40,6 +44,7 @@ final class Schema
      * - drop columns
      * - rename columns
      * - change type/nullable/default
+     * - change unique (via ColumnChange->unique())
      *
      * @param callable(Blueprint): void $callback
      */
@@ -52,33 +57,34 @@ final class Schema
         $drops = $t->drops();
         $renames = $t->renames();
         $changes = $t->changes();
+        $fks = $t->foreignKeys();
 
-        // Nothing to do
-        if ($adds === [] && $drops === [] && $renames === [] && $changes === []) {
+        if ($adds === [] && $drops === [] && $renames === [] && $changes === [] && $fks === []) {
             return;
         }
 
         $driver = $this->driver();
 
-        // SQLite needs rebuild for anything besides "add column"
         if ($driver === 'sqlite') {
+            if ($fks !== []) {
+                throw new RuntimeException('SQLite foreign keys are not supported yet in Lilly migrations. Use MySQL for now.');
+            }
+
             $needsRebuild = ($drops !== []) || ($renames !== []) || ($changes !== []);
             if ($needsRebuild) {
                 $this->rebuildSqliteTable($table, $t);
                 return;
             }
 
-            // Add-only path for sqlite
             foreach ($adds as $c) {
-                $sql = $this->compileAddColumnSqlite($table, $c);
-                $this->pdo->exec($sql);
+                $this->pdo->exec($this->compileAddColumnSqlite($table, $c));
             }
 
-            $this->applyUniqueIndexes($table, $t, $driver);
+            $this->applyUniqueIndexes($table, $t, 'sqlite');
+            $this->applyUniqueIndexChanges($table, $changes, 'sqlite');
             return;
         }
 
-        // MySQL: execute operations directly
         if ($driver === 'mysql') {
             foreach ($drops as $name) {
                 $sql = "ALTER TABLE " . $this->qiMysql($table) . " DROP COLUMN " . $this->qiMysql($name);
@@ -97,6 +103,10 @@ final class Schema
                     continue;
                 }
 
+                if (!$this->hasColumnDefinitionChange($ch)) {
+                    continue;
+                }
+
                 $sql = "ALTER TABLE " . $this->qiMysql($table) .
                     " MODIFY COLUMN " . $this->qiMysql($ch->name) . " " .
                     $this->compileMysqlChangedColumnDefinition($table, $ch);
@@ -105,11 +115,16 @@ final class Schema
             }
 
             foreach ($adds as $c) {
-                $sql = $this->compileAddColumnMysql($table, $c);
-                $this->pdo->exec($sql);
+                $this->pdo->exec($this->compileAddColumnMysql($table, $c));
             }
 
-            $this->applyUniqueIndexes($table, $t, $driver);
+            $this->applyUniqueIndexes($table, $t, 'mysql');
+            $this->applyUniqueIndexChanges($table, $changes, 'mysql');
+
+            if ($fks !== []) {
+                $this->applyForeignKeys($table, $t, 'mysql', 'alter');
+            }
+
             return;
         }
 
@@ -168,7 +183,18 @@ final class Schema
 
         foreach ($t->columns() as $c) {
             if ($c->type === 'id') {
-                $parts[] = $this->qiMysql($c->name) . ' BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY';
+                if ($c->primary) {
+                    $parts[] = $this->qiMysql($c->name) . ' BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY';
+                } else {
+                    $col = $this->qiMysql($c->name) . ' BIGINT UNSIGNED';
+                    $col .= $c->nullable ? ' NULL' : ' NOT NULL';
+
+                    if ($c->default !== null) {
+                        $col .= ' DEFAULT ' . $this->literalMysql($c->default);
+                    }
+
+                    $parts[] = $col;
+                }
                 continue;
             }
 
@@ -184,7 +210,8 @@ final class Schema
 
         $cols = implode(",\n            ", $parts);
 
-        return "CREATE TABLE IF NOT EXISTS " . $this->qiMysql($t->table()) . " (\n            {$cols}\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        return "CREATE TABLE IF NOT EXISTS " . $this->qiMysql($t->table()) .
+            " (\n            {$cols}\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
     }
 
     private function compileAddColumnSqlite(string $table, Column $c): string
@@ -249,9 +276,113 @@ final class Schema
         }
     }
 
+    /**
+     * @param list<ColumnChange> $changes
+     */
+    private function applyUniqueIndexChanges(string $table, array $changes, string $driver): void
+    {
+        foreach ($changes as $ch) {
+            if ($ch->name === '__invalid__') {
+                continue;
+            }
+
+            if (!property_exists($ch, 'unique')) {
+                continue;
+            }
+
+            if ($ch->unique === null) {
+                continue;
+            }
+
+            $indexName = $this->uniqueIndexName($table, $ch->name);
+
+            if ($driver === 'mysql') {
+                if ($ch->unique === true) {
+                    $sql = "ALTER TABLE " . $this->qiMysql($table) .
+                        " ADD UNIQUE KEY " . $this->qiMysql($indexName) .
+                        " (" . $this->qiMysql($ch->name) . ")";
+                    $this->pdo->exec($sql);
+                    continue;
+                }
+
+                if ($this->mysqlIndexExists($table, $indexName)) {
+                    $sql = "ALTER TABLE " . $this->qiMysql($table) .
+                        " DROP INDEX " . $this->qiMysql($indexName);
+                    $this->pdo->exec($sql);
+                }
+
+                continue;
+            }
+
+            if ($driver === 'sqlite') {
+                if ($ch->unique === true) {
+                    $sql = "CREATE UNIQUE INDEX IF NOT EXISTS " . $this->qiSqlite($indexName) .
+                        " ON " . $this->qiSqlite($table) .
+                        " (" . $this->qiSqlite($ch->name) . ")";
+                    $this->pdo->exec($sql);
+                    continue;
+                }
+
+                $sql = "DROP INDEX IF EXISTS " . $this->qiSqlite($indexName);
+                $this->pdo->exec($sql);
+            }
+        }
+    }
+
+    private function applyForeignKeys(string $table, Blueprint $t, string $driver, string $mode): void
+    {
+        if ($driver !== 'mysql') {
+            if ($driver === 'sqlite') {
+                throw new RuntimeException("SQLite foreign keys are not supported yet ({$mode}). Use MySQL for now.");
+            }
+            throw new RuntimeException("Unsupported driver '{$driver}'");
+        }
+
+        foreach ($t->foreignKeys() as $fk) {
+            if ($fk->column === '__invalid__' || $fk->refTable === null || $fk->refColumn === null) {
+                continue;
+            }
+
+            $name = $fk->name ?? $this->foreignKeyName($table, $fk->column);
+
+            $sql = "ALTER TABLE " . $this->qiMysql($table) .
+                " ADD CONSTRAINT " . $this->qiMysql($name) .
+                " FOREIGN KEY (" . $this->qiMysql($fk->column) . ")" .
+                " REFERENCES " . $this->qiMysql($fk->refTable) .
+                " (" . $this->qiMysql($fk->refColumn) . ")";
+
+            if ($fk->onDelete !== null) {
+                $sql .= " ON DELETE " . $this->fkActionMysql($fk->onDelete);
+            }
+            if ($fk->onUpdate !== null) {
+                $sql .= " ON UPDATE " . $this->fkActionMysql($fk->onUpdate);
+            }
+
+            $this->pdo->exec($sql);
+        }
+    }
+
     private function uniqueIndexName(string $table, string $col): string
     {
         return "{$table}_{$col}_unique";
+    }
+
+    private function foreignKeyName(string $table, string $col): string
+    {
+        return "{$table}_{$col}_fk";
+    }
+
+    private function fkActionMysql(string $action): string
+    {
+        $a = strtolower(trim($action));
+
+        return match ($a) {
+            'cascade' => 'CASCADE',
+            'restrict' => 'RESTRICT',
+            'set-null' => 'SET NULL',
+            'no-action' => 'NO ACTION',
+            default => 'RESTRICT',
+        };
     }
 
     private function mapTypeSqlite(string $type): string
@@ -271,6 +402,12 @@ final class Schema
 
     private function mapTypeMysql(string $type): string
     {
+        $type = trim($type);
+
+        if ($type === 'string') {
+            return 'VARCHAR(255)';
+        }
+
         if (str_starts_with($type, 'string:')) {
             $len = (int) substr($type, strlen('string:'));
             $len = $len > 0 ? $len : 255;
@@ -324,18 +461,40 @@ final class Schema
         return "'" . $s . "'";
     }
 
+    private function hasColumnDefinitionChange(ColumnChange $ch): bool
+    {
+        if ($ch->type !== null) {
+            return true;
+        }
+
+        if ($ch->nullable !== null) {
+            return true;
+        }
+
+        if ($ch->default !== '__KEEP__') {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function mysqlIndexExists(string $table, string $indexName): bool
+    {
+        $sql = "SHOW INDEX FROM " . $this->qiMysql($table) . " WHERE Key_name = :name";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':name' => $indexName]);
+
+        $row = $stmt->fetch();
+        return $row !== false;
+    }
+
     private function compileMysqlChangedColumnDefinition(string $table, ColumnChange $ch): string
     {
-        // We must know the final type. If user didn't set type() we keep existing type.
-        // For MVP, we require type() for MySQL changes to avoid reading INFORMATION_SCHEMA here.
         if ($ch->type === null) {
             throw new RuntimeException("MySQL change() requires an explicit type() for '{$table}.{$ch->name}'");
         }
 
         $typeSql = $this->mapTypeMysql($ch->type);
-
-        // nullable: if not specified, default to NOT NULL (explicit is better than silent)
-        // You can change this later to "keep existing" by reading INFORMATION_SCHEMA.
         $nullableSql = ($ch->nullable === true) ? ' NULL' : ' NOT NULL';
 
         $defaultSql = '';
@@ -365,19 +524,16 @@ final class Schema
                 throw new RuntimeException("SQLite table '{$table}' does not exist");
             }
 
-            // Build rename map
             $renameFromTo = [];
             foreach ($t->renames() as $r) {
                 $renameFromTo[$r['from']] = $r['to'];
             }
 
-            // Drop set
             $dropSet = [];
             foreach ($t->drops() as $d) {
                 $dropSet[$d] = true;
             }
 
-            // Change map
             $changeMap = [];
             foreach ($t->changes() as $ch) {
                 if ($ch->name === '__invalid__') {
@@ -386,7 +542,6 @@ final class Schema
                 $changeMap[$ch->name] = $ch;
             }
 
-            // Compute new column definitions (ordered)
             $newCols = [];
 
             foreach ($existing as $col) {
@@ -403,7 +558,6 @@ final class Schema
                 $dflt = $col['dflt_value'];
                 $pk = $col['pk'];
 
-                // Apply change if present (by original name, before rename)
                 if (isset($changeMap[$oldName])) {
                     $ch = $changeMap[$oldName];
 
@@ -416,7 +570,6 @@ final class Schema
                     }
 
                     if ($ch->default !== '__KEEP__') {
-                        // Store raw default value, compile later
                         $dflt = $ch->default;
                     }
                 }
@@ -427,11 +580,10 @@ final class Schema
                     'notnull' => (int) $notnull,
                     'dflt_value' => $dflt,
                     'pk' => (int) $pk,
-                    'from' => $oldName, // for copy mapping
+                    'from' => $oldName,
                 ];
             }
 
-            // Apply adds (append)
             foreach ($t->columns() as $c) {
                 $newCols[] = [
                     'name' => $c->name,
@@ -440,17 +592,14 @@ final class Schema
                     'dflt_value' => $c->default,
                     'pk' => $c->primary ? 1 : 0,
                     'from' => null,
-                    'autoIncrement' => $c->autoIncrement,
                 ];
             }
 
-            // Build temp table
             $tmp = '__lilly_tmp_' . $table . '_' . substr(bin2hex(random_bytes(6)), 0, 12);
 
             $createSql = $this->compileCreateSqliteFromDefinition($tmp, $newCols);
             $this->pdo->exec($createSql);
 
-            // Copy data (only for columns that came from old table)
             $toNames = [];
             $selectExpr = [];
 
@@ -473,12 +622,11 @@ final class Schema
                 $this->pdo->exec($insertSql);
             }
 
-            // Swap tables
             $this->pdo->exec("DROP TABLE " . $this->qiSqlite($table));
             $this->pdo->exec("ALTER TABLE " . $this->qiSqlite($tmp) . " RENAME TO " . $this->qiSqlite($table));
 
-            // Recreate unique indexes declared in this blueprint only (MVP)
             $this->applyUniqueIndexes($table, $t, 'sqlite');
+            $this->applyUniqueIndexChanges($table, $t->changes(), 'sqlite');
         } finally {
             $this->pdo->exec('PRAGMA foreign_keys = ON;');
         }
@@ -511,7 +659,7 @@ final class Schema
     }
 
     /**
-     * @param list<array{name: string, type: string, notnull: int, dflt_value: mixed, pk: int}> $cols
+     * @param list<array{name: string, type: string, notnull: int, dflt_value: mixed, pk: int, from: string|null}> $cols
      */
     private function compileCreateSqliteFromDefinition(string $table, array $cols): string
     {
@@ -522,7 +670,6 @@ final class Schema
             $type = $c['type'] !== '' ? $c['type'] : 'TEXT';
 
             if ($c['pk'] === 1) {
-                // MVP rule: if primary key column is named "id", keep autoincrement behavior
                 if ($c['name'] === 'id') {
                     $parts[] = $name . ' INTEGER PRIMARY KEY AUTOINCREMENT';
                 } else {
