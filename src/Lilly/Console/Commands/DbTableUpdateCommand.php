@@ -43,8 +43,15 @@ final class DbTableUpdateCommand extends Command
             mkdir($migrationsDir, 0777, true);
             $output->writeln(' + dir  ' . $this->rel($migrationsDir));
         }
-
         $table = strtolower($domain);
+
+        $create = glob($migrationsDir . '/*_create_' . $table . '.php');
+        if ($create === false || count($create) === 0) {
+            $output->writeln("<error>No create-table migration found for domain {$domain}.</error>");
+            $output->writeln("<comment>Run: db:table:make {$domain}</comment>");
+            return Command::FAILURE;
+        }
+
         $stamp = gmdate('Y_m_d_His');
         $file = "{$stamp}_update_{$table}.php";
 
@@ -63,7 +70,7 @@ final class DbTableUpdateCommand extends Command
 
     private function stub(string $table): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nreturn function (\\PDO \$pdo): void {\n    \$schema = new \\Lilly\\Database\\Schema\\Schema(\$pdo);\n\n    \$schema->table('{$table}', function (\\Lilly\\Database\\Schema\\Blueprint \$t): void {\n        // Add columns here (MVP: add only)\n        // \$t->string('nickname')->nullable();\n        // \$t->integer('age')->default(0);\n    });\n};\n";
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Database\\Schema\\Schema;\nuse Lilly\\Database\\Schema\\Blueprint;\n\nreturn function (PDO \$pdo): void {\n    \$schema = new Schema(\$pdo);\n\n    \$schema->table('{$table}', function (Blueprint \$t): void {\n    });\n};\n";
     }
 
     private function normalizeDomainName(string $name): string

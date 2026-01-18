@@ -12,8 +12,6 @@ EnvLoader::load(projectRoot: realpath(__DIR__ . '/..') ?: (__DIR__ . '/..'));
 
 $config = Config::fromEnv();
 
-dd($config);
-
 $projectRoot = realpath(__DIR__ . '/..') ?: (__DIR__ . '/..');
 
 $kernel = new Kernel(

@@ -45,6 +45,14 @@ final class DbTableRemoveCommand extends Command
         }
 
         $table = strtolower($domain);
+
+        $create = glob($migrationsDir . '/*_create_' . $table . '.php');
+        if ($create === false || count($create) === 0) {
+            $output->writeln("<error>No create-table migration found for domain {$domain}.</error>");
+            $output->writeln("<comment>Run: db:table:make {$domain}</comment>");
+            return Command::FAILURE;
+        }
+
         $stamp = gmdate('Y_m_d_His');
         $file = "{$stamp}_remove_{$table}.php";
 
@@ -63,7 +71,7 @@ final class DbTableRemoveCommand extends Command
 
     private function stub(string $table): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nreturn function (\\PDO \$pdo): void {\n    \$schema = new \\Lilly\\Database\\Schema\\Schema(\$pdo);\n\n    \$schema->dropIfExists('{$table}');\n};\n";
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Database\\Schema\\Schema;\n\nreturn function (PDO \$pdo): void {\n    \$schema = new Schema(\$pdo);\n\n    \$schema->dropIfExists('{$table}');\n};\n";
     }
 
     private function normalizeDomainName(string $name): string

@@ -39,6 +39,17 @@ final class DbTableMakeCommand extends Command
         }
 
         $migrationsDir = "{$domainRoot}/Migrations";
+        $existing = glob($migrationsDir . '/*_create_' . strtolower($domain) . '.php');
+        if ($existing !== false && count($existing) > 0) {
+            $output->writeln(
+                "<error>Create-table migration already exists for domain {$domain}.</error>"
+            );
+            $output->writeln(
+                "<comment>Use db:table:update {$domain} instead.</comment>"
+            );
+            return Command::FAILURE;
+        }
+
         if (!is_dir($migrationsDir)) {
             mkdir($migrationsDir, 0777, true);
             $output->writeln(' + dir  ' . $this->rel($migrationsDir));
@@ -63,7 +74,7 @@ final class DbTableMakeCommand extends Command
 
     private function stub(string $table): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nreturn function (\\PDO \$pdo): void {\n    \$schema = new \\Lilly\\Database\\Schema\\Schema(\$pdo);\n\n    \$schema->create('{$table}', function (\\Lilly\\Database\\Schema\\Blueprint \$t): void {\n        \$t->id();\n        // \$t->string('email')->unique();\n        // \$t->string('name');\n        \$t->timestamps();\n    });\n};\n";
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Database\\Schema\\Schema;\nuse Lilly\\Database\\Schema\\Blueprint;\n\nreturn function (PDO \$pdo): void {\n    \$schema = new Schema(\$pdo);\n\n    \$schema->create('{$table}', function (Blueprint \$t): void {\n        \$t->id();\n        \$t->timestamps();\n    });\n};\n";
     }
 
     private function normalizeDomainName(string $name): string

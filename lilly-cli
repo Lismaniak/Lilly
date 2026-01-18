@@ -15,9 +15,6 @@ EnvLoader::load(projectRoot: __DIR__);
 
 $config = Config::fromEnv();
 
-var_dump($config);
-exit;
-
 use Lilly\Console\ApplicationFactory;
 
 $application = ApplicationFactory::create(
