@@ -42,7 +42,8 @@ final class MakeDomainCommand extends Command
         $this->mkdir($domainRoot, $output);
 
         $dirs = [
-            'Models',
+            'Schema',
+            'Entities',
             'Repositories',
             'Migrations/owned',
             'Policies/Gates',
@@ -62,10 +63,17 @@ final class MakeDomainCommand extends Command
         }
 
         $domainKey = strtolower($domain);
+        $singular = $this->singularize($domain);
 
         $this->writeFile(
-            $domainRoot . "/Models/{$domain}.php",
-            $this->domainModelStub($domain),
+            $domainRoot . "/Schema/{$domain}Schema.php",
+            $this->domainSchemaStub($domain),
+            $output
+        );
+
+        $this->writeFile(
+            $domainRoot . "/Entities/{$singular}.php",
+            $this->entityStub($domain, $singular),
             $output
         );
 
@@ -95,13 +103,13 @@ final class MakeDomainCommand extends Command
 
         $this->writeFile(
             $domainRoot . "/Repositories/{$domain}QueryRepository.php",
-            $this->queryRepoStub($domain, $domainKey),
+            $this->queryRepoStub($domain),
             $output
         );
 
         $this->writeFile(
             $domainRoot . "/Repositories/{$domain}CommandRepository.php",
-            $this->commandRepoStub($domain, $domainKey),
+            $this->commandRepoStub($domain),
             $output
         );
 
@@ -113,6 +121,16 @@ final class MakeDomainCommand extends Command
     {
         $name = preg_replace('/[^A-Za-z0-9]/', '', trim($name)) ?? '';
         return $name !== '' ? ucfirst($name) : '';
+    }
+
+    private function singularize(string $domain): string
+    {
+        $lower = strtolower($domain);
+        if (str_ends_with($lower, 's')) {
+            return substr($domain, 0, -1);
+        }
+
+        return $domain;
     }
 
     private function mkdir(string $path, OutputInterface $output): void
@@ -154,17 +172,17 @@ final class MakeDomainCommand extends Command
         return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Policies;\n\nuse Lilly\\Http\\Request;\nuse Lilly\\Security\\DomainPolicy;\nuse Lilly\\Security\\PolicyDecision;\n\nfinal class {$domain}Policy implements DomainPolicy\n{\n    public function domain(): string\n    {\n        return '{$domainKey}';\n    }\n\n    public function authorize(Request \$request): PolicyDecision\n    {\n        return PolicyDecision::allow();\n    }\n}\n";
     }
 
-    private function queryRepoStub(string $domain, string $domainKey): string
+    private function queryRepoStub(string $domain): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Models\\{$domain};\nuse Lilly\\Database\\Repositories\\AbstractRepository;\n\nfinal class {$domain}QueryRepository extends AbstractRepository\n{\n    protected function table(): string\n    {\n        return {$domain}::table();\n    }\n\n    protected function primaryKey(): string\n    {\n        return {$domain}::primaryKey();\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Schema\\{$domain}Schema;\nuse Lilly\\Database\\Repositories\\AbstractRepository;\n\nfinal class {$domain}QueryRepository extends AbstractRepository\n{\n    protected function table(): string\n    {\n        return {$domain}Schema::table();\n    }\n\n    protected function primaryKey(): string\n    {\n        return {$domain}Schema::primaryKey();\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
     }
 
-    private function commandRepoStub(string $domain, string $domainKey): string
+    private function commandRepoStub(string $domain): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Models\\{$domain};\nuse Lilly\\Database\\Repositories\\AbstractRepository;\n\nfinal class {$domain}CommandRepository extends AbstractRepository\n{\n    protected function table(): string\n    {\n        return {$domain}::table();\n    }\n\n    protected function primaryKey(): string\n    {\n        return {$domain}::primaryKey();\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Schema\\{$domain}Schema;\nuse Lilly\\Database\\Repositories\\AbstractRepository;\n\nfinal class {$domain}CommandRepository extends AbstractRepository\n{\n    protected function table(): string\n    {\n        return {$domain}Schema::table();\n    }\n\n    protected function primaryKey(): string\n    {\n        return {$domain}Schema::primaryKey();\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
     }
 
-    private function domainModelStub(string $domain): string
+    private function domainSchemaStub(string $domain): string
     {
         $domainKey = strtolower($domain);
         $singular = str_ends_with($domainKey, 's') ? substr($domainKey, 0, -1) : $domainKey;
@@ -189,6 +207,14 @@ final class MakeDomainCommand extends Command
 
         $fkLines = implode(",\n", $fkBlocks);
 
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Models;\n\n/**\n * Domain definition model.\n *\n * Used by CLI tooling (migrations scaffolding, introspection).\n */\nfinal class {$domain}\n{\n    public static function table(): string\n    {\n        return '{$domainKey}';\n    }\n\n    public static function primaryKey(): string\n    {\n        return 'id';\n    }\n\n    public static function idType(): string\n    {\n        return 'int';\n    }\n\n    public static function fromRow(array \$row): self\n    {\n        return new self();\n    }\n\n    public static function ownedTables(): array\n    {\n        return [\n{$ownedLines}\n        ];\n    }\n\n    public static function foreignKeys(): array\n    {\n        return [\n{$fkLines}\n        ];\n    }\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Schema;\n\n/**\n * Domain schema definition.\n *\n * Used by CLI tooling (migrations scaffolding, introspection).\n */\nfinal class {$domain}Schema\n{\n    public static function table(): string\n    {\n        return '{$domainKey}';\n    }\n\n    public static function primaryKey(): string\n    {\n        return 'id';\n    }\n\n    public static function idType(): string\n    {\n        return 'int';\n    }\n\n    public static function ownedTables(): array\n    {\n        return [\n{$ownedLines}\n        ];\n    }\n\n    public static function foreignKeys(): array\n    {\n        return [\n{$fkLines}\n        ];\n    }\n}\n";
+    }
+
+    private function entityStub(string $domain, string $singular): string
+    {
+        $domainKey = strtolower($domain);
+        $singularKey = str_ends_with($domainKey, 's') ? substr($domainKey, 0, -1) : $domainKey;
+
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Entities;\n\nuse Domains\\{$domain}\\Repositories\\{$domain}CommandRepository;\nuse Domains\\{$domain}\\Repositories\\{$domain}QueryRepository;\nuse Domains\\{$domain}\\Schema\\{$domain}Schema;\nuse Lilly\\Orm\\ActiveRecord;\n\nfinal class {$singular} extends ActiveRecord\n{\n    public function __construct(\n        public readonly int \$id\n    ) {}\n\n    protected static function queryRepositoryFqcn(): string\n    {\n        return {$domain}QueryRepository::class;\n    }\n\n    protected static function commandRepositoryFqcn(): string\n    {\n        return {$domain}CommandRepository::class;\n    }\n\n    public static function fromRow(array \$row): static\n    {\n        return new self(\n            id: (int) \$row[{$domain}Schema::primaryKey()]\n        );\n    }\n}\n";
     }
 }

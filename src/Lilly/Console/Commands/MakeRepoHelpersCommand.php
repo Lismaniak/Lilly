@@ -13,7 +13,7 @@ final class MakeRepoHelpersCommand extends Command
     public function __construct(
         private readonly string $projectRoot
     ) {
-        parent::__construct('shape:domain:helpers');
+        parent::__construct('shape:repo:helpers');
     }
 
     protected function configure(): void
@@ -32,25 +32,32 @@ final class MakeRepoHelpersCommand extends Command
             return Command::FAILURE;
         }
 
-        $modelFqcn = "Domains\\{$domain}\\Models\\{$domain}";
-        if (!class_exists($modelFqcn)) {
-            $output->writeln("<error>Domain model not found:</error> {$modelFqcn}");
+        $schemaFqcn = "Domains\\{$domain}\\Schema\\{$domain}Schema";
+        if (!class_exists($schemaFqcn)) {
+            $output->writeln("<error>Domain schema not found:</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        $idType = $modelFqcn::idType();
+        $entityFqcn = "Domains\\{$domain}\\Entities\\{$this->singularize($domain)}";
+        if (!class_exists($entityFqcn)) {
+            $output->writeln("<error>Domain entity not found:</error> {$entityFqcn}");
+            return Command::FAILURE;
+        }
+
+        $idType = $schemaFqcn::idType();
+        $entityShort = $this->singularize($domain);
 
         $this->appendHelpers(
             "{$this->projectRoot}/src/Domains/{$domain}/Repositories/{$domain}QueryRepository.php",
-            $this->queryHelpersStub($domain, $idType),
-            ['findById', 'existsById'],
+            $this->queryHelpersStub($entityShort, $idType),
+            ['findById', 'existsById', 'findAll', 'count'],
             $output
         );
 
         $this->appendHelpers(
             "{$this->projectRoot}/src/Domains/{$domain}/Repositories/{$domain}CommandRepository.php",
             $this->commandHelpersStub($idType),
-            ['deleteById'],
+            ['deleteById', 'deleteAll'],
             $output
         );
 
@@ -96,17 +103,17 @@ final class MakeRepoHelpersCommand extends Command
         $output->writeln(" + file {$this->rel($path)}");
     }
 
-    private function queryHelpersStub(string $domain, string $idType): string
+    private function queryHelpersStub(string $entityShort, string $idType): string
     {
         return
             "\n" .
-            "    public function findById({$idType} \$id): ?{$domain}\n" .
+            "    public function findById({$idType} \$id): ?{$entityShort}\n" .
             "    {\n" .
             "        \$row = \$this->findRowById(\$id);\n" .
             "        if (\$row === null) {\n" .
             "            return null;\n" .
             "        }\n\n" .
-            "        return {$domain}::fromRow(\$row);\n" .
+            "        return {$entityShort}::fromRow(\$row);\n" .
             "    }\n\n" .
 
             "    public function existsById({$idType} \$id): bool\n" .
@@ -119,7 +126,7 @@ final class MakeRepoHelpersCommand extends Command
             "        \$sql = 'SELECT * FROM ' . \$this->qi(\$this->table());\n" .
             "        \$stmt = \$this->pdo->query(\$sql);\n" .
             "        \$rows = \$stmt->fetchAll(\\PDO::FETCH_ASSOC);\n\n" .
-            "        return array_map(fn(array \$row) => {$domain}::fromRow(\$row), \$rows);\n" .
+            "        return array_map(fn(array \$row) => {$entityShort}::fromRow(\$row), \$rows);\n" .
             "    }\n\n" .
 
             "    public function count(): int\n" .
@@ -143,6 +150,16 @@ final class MakeRepoHelpersCommand extends Command
             "        \$sql = 'DELETE FROM ' . \$this->qi(\$this->table());\n" .
             "        \$this->pdo->exec(\$sql);\n" .
             "    }\n";
+    }
+
+    private function singularize(string $domain): string
+    {
+        $lower = strtolower($domain);
+        if (str_ends_with($lower, 's')) {
+            return substr($domain, 0, -1);
+        }
+
+        return $domain;
     }
 
     private function normalizeDomainName(string $name): string
