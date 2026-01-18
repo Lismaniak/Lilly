@@ -6,6 +6,7 @@ namespace Lilly\Console\Commands;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class DbTableMakeCommand extends Command
@@ -19,9 +20,10 @@ final class DbTableMakeCommand extends Command
     protected function configure(): void
     {
         $this
-            ->setDescription('Scaffold a create-table migration for a domain table or an owned table (resolved from the domain model)')
+            ->setDescription('Scaffold a create-table migration. Table is resolved from the domain schema.')
             ->addArgument('domain', InputArgument::REQUIRED, 'Domain name, e.g. Users')
-            ->addArgument('table', InputArgument::OPTIONAL, 'Optional. If omitted, uses the domain table from the domain model. If provided, must be an owned table from the domain model.');
+            ->addArgument('table', InputArgument::OPTIONAL, 'Optional. If omitted, creates the domain table from the domain schema. If provided, must be an owned table from the domain schema.')
+            ->addOption('owned', null, InputOption::VALUE_NONE, 'If set, treat the [table] argument as an owned table (stored in Migrations/owned/<table>/)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -31,11 +33,13 @@ final class DbTableMakeCommand extends Command
         $tableArg = $input->getArgument('table');
         $tableInput = is_string($tableArg) ? $this->normalizeTableName($tableArg) : '';
 
+        $ownedFlag = (bool) $input->getOption('owned');
+
         if ($domain === '') {
-            $output->writeln('<error>Usage: db:table:make <Domain> [table]</error>');
+            $output->writeln('<error>Usage: db:table:make <Domain> [table] [--owned]</error>');
             $output->writeln('<comment>Examples:</comment>');
             $output->writeln('<comment>  db:table:make Users</comment>');
-            $output->writeln('<comment>  db:table:make Users user_emails</comment>');
+            $output->writeln('<comment>  db:table:make Users user_emails --owned</comment>');
             return Command::FAILURE;
         }
 
@@ -45,25 +49,24 @@ final class DbTableMakeCommand extends Command
             return Command::FAILURE;
         }
 
-        $modelFqcn = "Domains\\{$domain}\\Models\\{$domain}";
-        if (!class_exists($modelFqcn)) {
-            $output->writeln("<error>Domain model missing or not autoloadable:</error> {$modelFqcn}");
+        $schemaFqcn = "Domains\\{$domain}\\Schema\\{$domain}Schema";
+        if (!class_exists($schemaFqcn)) {
+            $output->writeln("<error>Domain schema missing or not autoloadable:</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        if (!method_exists($modelFqcn, 'table') || !method_exists($modelFqcn, 'ownedTables')) {
-            $output->writeln("<error>Domain model must define table() and ownedTables():</error> {$modelFqcn}");
+        if (!method_exists($schemaFqcn, 'table') || !method_exists($schemaFqcn, 'ownedTables')) {
+            $output->writeln("<error>Domain schema must define table() and ownedTables():</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        $domainTable = $this->normalizeTableName((string) $modelFqcn::table());
-
+        $domainTable = $this->normalizeTableName((string) $schemaFqcn::table());
         if ($domainTable === '') {
-            $output->writeln("<error>Invalid domain table in {$modelFqcn}::table().</error>");
+            $output->writeln("<error>Invalid domain table() value in schema:</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        $ownedRaw = $modelFqcn::ownedTables();
+        $ownedRaw = $schemaFqcn::ownedTables();
         $ownedTables = [];
 
         if (is_array($ownedRaw)) {
@@ -78,26 +81,39 @@ final class DbTableMakeCommand extends Command
             }
         }
 
-        $isDomainTable = false;
+        // Resolve target table:
+        // - no [table] arg => domain table
+        // - [table] arg:
+        //   - if --owned => must be owned table
+        //   - else => allow domain table name, OR owned table name (but owned migrations go in owned/<table>)
         $isOwnedTable = false;
 
         if ($tableInput === '') {
             $table = $domainTable;
-            $isDomainTable = true;
+            $isOwnedTable = false;
         } else {
             $table = $tableInput;
-            $isDomainTable = $table === $domainTable;
-            $isOwnedTable = isset($ownedTables[$table]);
 
-            if (!$isDomainTable && !$isOwnedTable) {
-                $output->writeln("<error>Table '{$table}' is not part of domain '{$domain}'.</error>");
-                $output->writeln("<comment>Domain table:</comment> {$domainTable}");
-                if ($ownedTables !== []) {
-                    $output->writeln('<comment>Owned tables:</comment> ' . implode(', ', array_keys($ownedTables)));
-                } else {
-                    $output->writeln('<comment>Owned tables:</comment> (none)');
+            if ($ownedFlag) {
+                $isOwnedTable = isset($ownedTables[$table]);
+                if (!$isOwnedTable) {
+                    $output->writeln("<error>Table '{$table}' is not an owned table of domain '{$domain}'.</error>");
+                    $output->writeln("<comment>Domain table:</comment> {$domainTable}");
+                    $output->writeln('<comment>Owned tables:</comment> ' . ($ownedTables !== [] ? implode(', ', array_keys($ownedTables)) : '(none)'));
+                    return Command::FAILURE;
                 }
-                return Command::FAILURE;
+            } else {
+                if ($table === $domainTable) {
+                    $isOwnedTable = false;
+                } else {
+                    $isOwnedTable = isset($ownedTables[$table]);
+                    if (!$isOwnedTable) {
+                        $output->writeln("<error>Table '{$table}' is not the domain table nor an owned table of domain '{$domain}'.</error>");
+                        $output->writeln("<comment>Domain table:</comment> {$domainTable}");
+                        $output->writeln('<comment>Owned tables:</comment> ' . ($ownedTables !== [] ? implode(', ', array_keys($ownedTables)) : '(none)'));
+                        return Command::FAILURE;
+                    }
+                }
             }
         }
 

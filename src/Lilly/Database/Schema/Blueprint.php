@@ -93,6 +93,13 @@ final class Blueprint
         return $c;
     }
 
+    public function unsignedBigInteger(string $name): Column
+    {
+        $c = new Column($name, 'ubigint', nullable: false, unique: false, primary: false, autoIncrement: false);
+        $this->columns[] = $c;
+        return $c;
+    }
+
     public function string(string $name, int $length = 255): Column
     {
         $col = new Column($name, "string:{$length}");

@@ -19,9 +19,9 @@ final class DbTableRemoveCommand extends Command
     protected function configure(): void
     {
         $this
-            ->setDescription('Scaffold a drop-table migration for a domain table or an owned table (resolved from the domain model)')
+            ->setDescription('Scaffold a drop-table migration. Table is resolved from the domain schema.')
             ->addArgument('domain', InputArgument::REQUIRED, 'Domain name, e.g. Users')
-            ->addArgument('table', InputArgument::OPTIONAL, 'Optional. If omitted, removes the domain table. If provided, must be an owned table.');
+            ->addArgument('table', InputArgument::OPTIONAL, 'Optional. If omitted, removes the domain table from the domain schema. If provided, must be an owned table from the domain schema.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -45,24 +45,24 @@ final class DbTableRemoveCommand extends Command
             return Command::FAILURE;
         }
 
-        $modelFqcn = "Domains\\{$domain}\\Models\\{$domain}";
-        if (!class_exists($modelFqcn)) {
-            $output->writeln("<error>Domain model missing or not autoloadable:</error> {$modelFqcn}");
+        $schemaFqcn = "Domains\\{$domain}\\Schema\\{$domain}Schema";
+        if (!class_exists($schemaFqcn)) {
+            $output->writeln("<error>Domain schema missing or not autoloadable:</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        if (!method_exists($modelFqcn, 'table') || !method_exists($modelFqcn, 'ownedTables')) {
-            $output->writeln("<error>Domain model must define table() and ownedTables():</error> {$modelFqcn}");
+        if (!method_exists($schemaFqcn, 'table') || !method_exists($schemaFqcn, 'ownedTables')) {
+            $output->writeln("<error>Domain schema must define table() and ownedTables():</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        $domainTable = $this->normalizeTableName((string) $modelFqcn::table());
+        $domainTable = $this->normalizeTableName((string) $schemaFqcn::table());
         if ($domainTable === '') {
-            $output->writeln("<error>Invalid domain table() value in model:</error> {$modelFqcn}");
+            $output->writeln("<error>Invalid domain table() value in schema:</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        $ownedRaw = $modelFqcn::ownedTables();
+        $ownedRaw = $schemaFqcn::ownedTables();
         $ownedTables = [];
 
         if (is_array($ownedRaw)) {

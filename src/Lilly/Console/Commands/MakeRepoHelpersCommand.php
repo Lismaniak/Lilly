@@ -13,7 +13,7 @@ final class MakeRepoHelpersCommand extends Command
     public function __construct(
         private readonly string $projectRoot
     ) {
-        parent::__construct('shape:repo:helpers');
+        parent::__construct('shape:domain:helpers');
     }
 
     protected function configure(): void

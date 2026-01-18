@@ -19,7 +19,7 @@ final class DomainDbSyncCommand extends Command
     protected function configure(): void
     {
         $this
-            ->setDescription('Ensure create-table migrations exist for a domain table and its owned tables (from the domain model)')
+            ->setDescription('Ensure create-table migrations exist for a domain table and its owned tables (from the domain schema)')
             ->addArgument('domain', InputArgument::OPTIONAL, 'Optional. Domain name, e.g. Users. If omitted, syncs all domains.');
     }
 
@@ -44,22 +44,22 @@ final class DomainDbSyncCommand extends Command
                 continue;
             }
 
-            $modelFqcn = "Domains\\{$domain}\\Models\\{$domain}";
-            if (!class_exists($modelFqcn)) {
-                $output->writeln("<error>Domain model missing or not autoloadable:</error> {$modelFqcn}");
+            $schemaFqcn = "Domains\\{$domain}\\Schema\\{$domain}Schema";
+            if (!class_exists($schemaFqcn)) {
+                $output->writeln("<error>Domain schema missing or not autoloadable:</error> {$schemaFqcn}");
                 continue;
             }
 
-            if (!method_exists($modelFqcn, 'table') || !method_exists($modelFqcn, 'ownedTables')) {
-                $output->writeln("<error>Domain model must define table() and ownedTables():</error> {$modelFqcn}");
+            if (!method_exists($schemaFqcn, 'table') || !method_exists($schemaFqcn, 'ownedTables')) {
+                $output->writeln("<error>Domain schema must define table() and ownedTables():</error> {$schemaFqcn}");
                 continue;
             }
 
-            $domainTable = $this->normalizeTableName((string) $modelFqcn::table());
-            $ownedTables = $modelFqcn::ownedTables();
+            $domainTable = $this->normalizeTableName((string) $schemaFqcn::table());
+            $ownedTables = $schemaFqcn::ownedTables();
 
             if ($domainTable === '') {
-                $output->writeln("<error>Invalid table() for domain:</error> {$domain}");
+                $output->writeln("<error>Invalid table() for domain schema:</error> {$domain}");
                 continue;
             }
 
@@ -75,71 +75,65 @@ final class DomainDbSyncCommand extends Command
                 $output->writeln(' + dir  ' . $this->rel($migrationsDir));
             }
 
-            // 1) Domain table migration: Migrations/*_create.php (flat)
-            $created = $this->ensureCreateMigrationFlat(
-                output: $output,
-                dir: $migrationsDir,
-                label: $domainTable,
-                table: $domainTable
-            );
-            $createdAny = $createdAny || $created;
+            if (!$this->hasCreateMigration($migrationsDir, $domainTable)) {
+                $createdAny = true;
+                $this->writeCreateMigration($migrationsDir, $domainTable, $output);
+            }
 
-            // 2) Owned tables: Migrations/owned/<table>/*_create.php
-            foreach ($ownedTables as $t) {
-                if (!is_string($t)) {
+            foreach ($ownedTables as $rawOwned) {
+                if (!is_string($rawOwned)) {
                     continue;
                 }
 
-                $table = $this->normalizeTableName($t);
-                if ($table === '') {
+                $owned = $this->normalizeTableName($rawOwned);
+                if ($owned === '') {
                     continue;
                 }
 
-                $ownedDir = "{$migrationsDir}/owned/{$table}";
+                $ownedDir = "{$migrationsDir}/owned/{$owned}";
                 if (!is_dir($ownedDir)) {
                     mkdir($ownedDir, 0777, true);
                     $output->writeln(' + dir  ' . $this->rel($ownedDir));
                 }
 
-                $created = $this->ensureCreateMigrationFlat(
-                    output: $output,
-                    dir: $ownedDir,
-                    label: "owned/{$table}",
-                    table: $table
-                );
-                $createdAny = $createdAny || $created;
+                if (!$this->hasCreateMigration($ownedDir, $owned)) {
+                    $createdAny = true;
+                    $this->writeCreateMigration($ownedDir, $owned, $output);
+                }
             }
         }
 
         if (!$createdAny) {
-            $output->writeln('<info>No migrations needed.</info>');
+            $output->writeln('<info>All domains already have create-table migrations.</info>');
         }
 
         return Command::SUCCESS;
     }
 
-    private function ensureCreateMigrationFlat(OutputInterface $output, string $dir, string $label, string $table): bool
+    private function hasCreateMigration(string $dir, string $table): bool
     {
-        $existingCreate = glob($dir . '/*_create.php');
-        if ($existingCreate !== false && count($existingCreate) > 0) {
-            $output->writeln(" - ok   create exists for {$label}");
-            return false;
+        foreach (glob($dir . '/*.php') ?: [] as $file) {
+            $contents = @file_get_contents($file);
+            if ($contents === false) {
+                continue;
+            }
+
+            if (str_contains($contents, "->create('{$table}'") || str_contains($contents, "->create(\"{$table}\"")) {
+                return true;
+            }
         }
 
+        return false;
+    }
+
+    private function writeCreateMigration(string $dir, string $table, OutputInterface $output): void
+    {
         $stamp = gmdate('Y_m_d_His');
-        $path = "{$dir}/{$stamp}_create.php";
-
-        // ultra-low chance of collision, but avoid overwriting
-        if (is_file($path)) {
-            $stamp = gmdate('Y_m_d_His') . '01';
-            $path = "{$dir}/{$stamp}_create.php";
-        }
+        $file = "{$stamp}_create.php";
+        $path = "{$dir}/{$file}";
 
         file_put_contents($path, $this->stub($table));
         $output->writeln(' + file ' . $this->rel($path));
-        $output->writeln(" - add  create for {$label}");
-
-        return true;
     }
 
     private function stub(string $table): string
@@ -157,28 +151,27 @@ final class DomainDbSyncCommand extends Command
             return [];
         }
 
-        $items = scandir($root);
-        if ($items === false) {
+        $entries = scandir($root);
+        if ($entries === false) {
             return [];
         }
 
-        $out = [];
-
-        foreach ($items as $item) {
-            if ($item === '.' || $item === '..') {
+        $domains = [];
+        foreach ($entries as $e) {
+            if (!is_string($e) || $e === '.' || $e === '..') {
                 continue;
             }
-            if (str_starts_with($item, '.')) {
+            if (!is_dir("{$root}/{$e}")) {
                 continue;
             }
-
-            if (is_dir($root . '/' . $item)) {
-                $out[] = $item;
+            $name = $this->normalizeDomainName($e);
+            if ($name !== '') {
+                $domains[] = $name;
             }
         }
 
-        sort($out);
-        return $out;
+        sort($domains);
+        return $domains;
     }
 
     private function normalizeDomainName(string $name): string
@@ -192,7 +185,6 @@ final class DomainDbSyncCommand extends Command
     {
         $raw = trim($raw);
         $raw = strtolower($raw);
-
         $raw = preg_replace('/[^a-z0-9]+/', '_', $raw) ?? '';
         $raw = preg_replace('/_+/', '_', $raw) ?? '';
         $raw = trim($raw, '_');

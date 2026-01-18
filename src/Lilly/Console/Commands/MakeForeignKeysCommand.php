@@ -14,154 +14,167 @@ final class MakeForeignKeysCommand extends Command
     public function __construct(
         private readonly string $projectRoot
     ) {
-        parent::__construct('shape:domain:db:fk');
+        parent::__construct('shape:domain:fk');
     }
 
     protected function configure(): void
     {
         $this
-            ->setDescription('Generate foreign key migrations from Domain::foreignKeys()')
+            ->setDescription('Generate FK migrations from the domain schema foreignKeys() definition')
             ->addArgument('domain', InputArgument::REQUIRED, 'Domain name, e.g. Users');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $domain = $this->normalizeDomainName((string) $input->getArgument('domain'));
+
         if ($domain === '') {
-            $output->writeln('<error>Invalid domain name.</error>');
+            $output->writeln('<error>Usage: shape:domain:fk <Domain></error>');
+            $output->writeln('<comment>Example: shape:domain:fk Users</comment>');
             return Command::FAILURE;
         }
 
-        $domainRoot = $this->projectRoot . '/src/Domains/' . $domain;
+        $domainRoot = "{$this->projectRoot}/src/Domains/{$domain}";
         if (!is_dir($domainRoot)) {
-            $output->writeln("<error>Domain does not exist:</error> {$domain}");
+            $output->writeln("<error>Domain does not exist:</error> {$domain} (expected src/Domains/{$domain})");
             return Command::FAILURE;
         }
 
-        $modelFqcn = "Domains\\{$domain}\\Models\\{$domain}";
-        if (!class_exists($modelFqcn)) {
-            $output->writeln("<error>Domain model not found:</error> {$modelFqcn}");
+        $schemaFqcn = "Domains\\{$domain}\\Schema\\{$domain}Schema";
+        if (!class_exists($schemaFqcn)) {
+            $output->writeln("<error>Domain schema missing or not autoloadable:</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        if (!method_exists($modelFqcn, 'foreignKeys')) {
-            $output->writeln("<error>{$modelFqcn}::foreignKeys() missing.</error>");
+        if (
+            !method_exists($schemaFqcn, 'table')
+            || !method_exists($schemaFqcn, 'ownedTables')
+            || !method_exists($schemaFqcn, 'foreignKeys')
+        ) {
+            $output->writeln("<error>Domain schema must define table(), ownedTables(), foreignKeys():</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        if (!method_exists($modelFqcn, 'ownedTables') || !method_exists($modelFqcn, 'table')) {
-            $output->writeln("<error>{$modelFqcn} must have table() and ownedTables().</error>");
+        $domainTable = $this->normalizeTableName((string) $schemaFqcn::table());
+        if ($domainTable === '') {
+            $output->writeln("<error>Invalid domain table() value in schema:</error> {$schemaFqcn}");
             return Command::FAILURE;
         }
 
-        $domainTable = (string) $modelFqcn::table();
+        $ownedSet = $this->buildOwnedSet($schemaFqcn);
 
-        $owned = $modelFqcn::ownedTables();
-        $ownedSet = $this->buildOwnedSet($owned);
-
-        $fks = $modelFqcn::foreignKeys();
-        if (!is_array($fks) || $fks === []) {
-            $output->writeln("<info>No foreign keys defined for:</info> {$domain}");
+        $fksRaw = $schemaFqcn::foreignKeys();
+        if (!is_array($fksRaw) || $fksRaw === []) {
+            $output->writeln("<comment>No foreign keys defined in {$schemaFqcn}::foreignKeys().</comment>");
             return Command::SUCCESS;
         }
 
-        $count = 0;
-        $now = time();
+        $created = 0;
 
-        foreach ($fks as $fk) {
-            $def = $this->normalizeFkDefinition($fk, $modelFqcn);
+        foreach ($fksRaw as $fk) {
+            $norm = $this->normalizeFkDefinition($fk, $schemaFqcn);
 
-            $this->assertDomainTableAllowed($def['table'], $domainTable, $ownedSet, $modelFqcn);
-            $this->assertDomainTableAllowed($def['refTable'], $domainTable, $ownedSet, $modelFqcn);
+            $table = $norm['table'];
+            $column = $norm['column'];
+            $refTable = $norm['refTable'];
+            $refColumn = $norm['refColumn'];
+            $onDelete = $norm['onDelete'];
+            $onUpdate = $norm['onUpdate'];
 
-            // Guard: create migrations must exist before FK migrations are generated
-            $this->assertCreateMigrationExists($domainRoot, $def['table'], $domainTable);
-            $this->assertCreateMigrationExists($domainRoot, $def['refTable'], $domainTable);
-            $this->assertColumnExistsInCreateMigration($domainRoot, $def['table'], $domainTable, $def['column']);
+            $this->assertDomainTableAllowed($table, $domainTable, $ownedSet, $schemaFqcn);
+            $this->assertCreateMigrationExists($domainRoot, $table, $domainTable);
 
-            $targetDir = $this->fkMigrationDir($domainRoot, $def['table'], $domainTable);
-            $this->mkdir($targetDir);
+            $needsColumn = !$this->columnAppearsInAnyMigration($domainRoot, $table, $column);
 
-            $stamp = date('Y_m_d_His', $now + $count);
-            $file = "{$stamp}_fk_{$def['table']}_{$def['column']}.php";
-            $path = $targetDir . '/' . $file;
+            $dir = $this->fkMigrationDir($domainRoot, $table, $domainTable);
+            $this->mkdir($dir);
 
-            if (file_exists($path)) {
-                $output->writeln(" = skip {$this->rel($path)} (exists)");
-                $count++;
-                continue;
+            $stamp = gmdate('Y_m_d_His');
+            $file = "{$stamp}_fk_{$column}.php";
+            $path = "{$dir}/{$file}";
+
+            if (is_file($path)) {
+                throw new RuntimeException("FK migration already exists: {$this->rel($path)}");
             }
 
-            file_put_contents(
-                $path,
-                $this->fkMigrationStub(
-                    $def['table'],
-                    $def['column'],
-                    $def['refTable'],
-                    $def['refColumn'],
-                    $def['onDelete'],
-                    $def['onUpdate']
-                )
-            );
+            file_put_contents($path, $this->fkMigrationStub(
+                table: $table,
+                column: $column,
+                refTable: $refTable,
+                refColumn: $refColumn,
+                onDelete: $onDelete,
+                onUpdate: $onUpdate,
+                needsColumn: $needsColumn
+            ));
 
-            $output->writeln(" + file {$this->rel($path)}");
-            $count++;
+            $output->writeln(' + file ' . $this->rel($path));
+            $created++;
         }
 
-        $output->writeln("<info>Generated foreign key migrations:</info> {$count}");
+        if ($created === 0) {
+            $output->writeln('<comment>No FK migrations created.</comment>');
+            return Command::SUCCESS;
+        }
+
+        $output->writeln("<info>Created {$created} FK migration(s).</info>");
         return Command::SUCCESS;
     }
 
     /**
-     * @param mixed $owned
      * @return array<string, true>
      */
-    private function buildOwnedSet(mixed $owned): array
+    private function buildOwnedSet(string $schemaFqcn): array
     {
-        if (!is_array($owned)) {
-            throw new RuntimeException('ownedTables() must return list<string>');
+        $ownedRaw = $schemaFqcn::ownedTables();
+        $ownedSet = [];
+
+        if (!is_array($ownedRaw)) {
+            return $ownedSet;
         }
 
-        $set = [];
-        foreach ($owned as $t) {
-            if (!is_string($t) || trim($t) === '') {
-                throw new RuntimeException('ownedTables() must return list<string>');
+        foreach ($ownedRaw as $t) {
+            if (!is_string($t)) {
+                continue;
             }
-            $set[$t] = true;
+            $n = $this->normalizeTableName($t);
+            if ($n !== '') {
+                $ownedSet[$n] = true;
+            }
         }
 
-        return $set;
+        return $ownedSet;
     }
 
     /**
-     * @param mixed $fk
-     * @return array{
-     *   table: string,
-     *   column: string,
-     *   refTable: string,
-     *   refColumn: string,
-     *   onDelete: string|null,
-     *   onUpdate: string|null
-     * }
+     * @return array{table:string,column:string,refTable:string,refColumn:string,onDelete:?string,onUpdate:?string}
      */
-    private function normalizeFkDefinition(mixed $fk, string $modelFqcn): array
+    private function normalizeFkDefinition(mixed $fk, string $schemaFqcn): array
     {
         if (!is_array($fk)) {
-            throw new RuntimeException("Invalid FK definition in {$modelFqcn}::foreignKeys()");
+            throw new RuntimeException("Invalid FK definition in {$schemaFqcn}::foreignKeys()");
         }
 
-        $table = isset($fk['table']) ? (string) $fk['table'] : '';
-        $column = isset($fk['column']) ? (string) $fk['column'] : '';
+        $table = isset($fk['table']) ? $this->normalizeTableName((string) $fk['table']) : '';
+        $column = isset($fk['column']) ? $this->normalizeTableName((string) $fk['column']) : '';
 
-        $ref = $fk['references'] ?? null;
-        $refTable = is_array($ref) ? (string) ($ref['table'] ?? '') : '';
-        $refColumn = is_array($ref) ? (string) ($ref['column'] ?? '') : '';
+        $refTable = '';
+        $refColumn = '';
+
+        if (isset($fk['references']) && is_array($fk['references'])) {
+            $ref = $fk['references'];
+            $refTable = isset($ref['table']) ? $this->normalizeTableName((string) $ref['table']) : '';
+            $refColumn = isset($ref['column']) ? $this->normalizeTableName((string) $ref['column']) : '';
+        } else {
+            $refTable = isset($fk['refTable']) ? $this->normalizeTableName((string) $fk['refTable']) : '';
+            $refColumn = isset($fk['refColumn']) ? $this->normalizeTableName((string) $fk['refColumn']) : '';
+        }
 
         $onDelete = isset($fk['onDelete']) ? (string) $fk['onDelete'] : null;
         $onUpdate = isset($fk['onUpdate']) ? (string) $fk['onUpdate'] : null;
 
-        if (trim($table) === '' || trim($column) === '' || trim($refTable) === '' || trim($refColumn) === '') {
-            throw new RuntimeException("Invalid FK definition in {$modelFqcn}::foreignKeys()");
+        if ($table === '' || $column === '' || $refTable === '' || $refColumn === '') {
+            $dump = json_encode($fk, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            throw new RuntimeException("Invalid FK definition in {$schemaFqcn}::foreignKeys(): {$dump}");
         }
 
         return [
@@ -169,8 +182,8 @@ final class MakeForeignKeysCommand extends Command
             'column' => $column,
             'refTable' => $refTable,
             'refColumn' => $refColumn,
-            'onDelete' => $onDelete !== '' ? $onDelete : null,
-            'onUpdate' => $onUpdate !== '' ? $onUpdate : null,
+            'onDelete' => ($onDelete !== null && $onDelete !== '') ? $onDelete : null,
+            'onUpdate' => ($onUpdate !== null && $onUpdate !== '') ? $onUpdate : null,
         ];
     }
 
@@ -189,7 +202,8 @@ final class MakeForeignKeysCommand extends Command
         string $refTable,
         string $refColumn,
         ?string $onDelete,
-        ?string $onUpdate
+        ?string $onUpdate,
+        bool $needsColumn
     ): string {
         $lines = [];
         $lines[] = "<?php";
@@ -202,6 +216,12 @@ final class MakeForeignKeysCommand extends Command
         $lines[] = "    \$schema = new Schema(\$pdo);";
         $lines[] = "";
         $lines[] = "    \$schema->table('{$table}', function (Blueprint \$t): void {";
+
+        if ($needsColumn) {
+            $lines[] = "        \$t->unsignedBigInteger('{$column}');";
+            $lines[] = "";
+        }
+
         $lines[] = "        \$fk = \$t->foreign('{$column}')->references('{$refTable}', '{$refColumn}');";
 
         if ($onDelete !== null && $onDelete !== '') {
@@ -218,7 +238,7 @@ final class MakeForeignKeysCommand extends Command
         return implode("\n", $lines);
     }
 
-    private function assertDomainTableAllowed(string $table, string $domainTable, array $ownedSet, string $modelFqcn): void
+    private function assertDomainTableAllowed(string $table, string $domainTable, array $ownedSet, string $schemaFqcn): void
     {
         if ($table === $domainTable) {
             return;
@@ -228,7 +248,7 @@ final class MakeForeignKeysCommand extends Command
             return;
         }
 
-        throw new RuntimeException("FK table '{$table}' is not domain table or owned table in {$modelFqcn}");
+        throw new RuntimeException("FK table '{$table}' is not domain table or owned table in {$schemaFqcn}");
     }
 
     private function assertCreateMigrationExists(string $domainRoot, string $table, string $domainTable): void
@@ -262,12 +282,10 @@ final class MakeForeignKeysCommand extends Command
                     continue;
                 }
 
-                // Accept Schema->create('<table>') calls (this is your convention)
                 if (str_contains($contents, "->create('{$table}'") || str_contains($contents, "->create(\"{$table}\"")) {
                     return true;
                 }
 
-                // Fallback: Schema::create('<table>' style
                 if (str_contains($contents, "create('{$table}'") || str_contains($contents, "create(\"{$table}\"")) {
                     return true;
                 }
@@ -277,45 +295,12 @@ final class MakeForeignKeysCommand extends Command
         return false;
     }
 
-    private function assertColumnExistsInCreateMigration(string $domainRoot, string $table, string $domainTable, string $column): void
-    {
-        if ($this->columnAppearsInCreateMigration($domainRoot, $table, $domainTable, $column)) {
-            return;
-        }
-
-        throw new RuntimeException(
-            "FK column '{$column}' not found in create migration for table '{$table}'. Create the column first, then generate FK migrations."
-        );
-    }
-
-    private function columnAppearsInCreateMigration(string $domainRoot, string $table, string $domainTable, string $column): bool
-    {
-        foreach ($this->candidateCreateMigrationFiles($domainRoot, $table, $domainTable) as $file) {
-            $contents = @file_get_contents($file);
-            if ($contents === false) {
-                continue;
-            }
-
-            // crude but effective: look for builder calls with ('column')
-            if (str_contains($contents, "('{$column}'") || str_contains($contents, "(\"{$column}\"")) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function candidateCreateMigrationFiles(string $domainRoot, string $table, string $domainTable): array
+    private function columnAppearsInAnyMigration(string $domainRoot, string $table, string $column): bool
     {
         $dirs = [
             $domainRoot . '/Migrations',
             $domainRoot . '/Migrations/owned/' . $table,
         ];
-
-        $out = [];
 
         foreach ($dirs as $dir) {
             if (!is_dir($dir)) {
@@ -328,13 +313,13 @@ final class MakeForeignKeysCommand extends Command
                     continue;
                 }
 
-                if (str_contains($contents, "->create('{$table}'") || str_contains($contents, "->create(\"{$table}\"")) {
-                    $out[] = $file;
+                if (str_contains($contents, "('{$column}'") || str_contains($contents, "(\"{$column}\"")) {
+                    return true;
                 }
             }
         }
 
-        return $out;
+        return false;
     }
 
     private function normalizeDomainName(string $name): string
@@ -342,6 +327,18 @@ final class MakeForeignKeysCommand extends Command
         $name = trim($name);
         $name = preg_replace('/[^A-Za-z0-9]/', '', $name) ?? '';
         return $name !== '' ? ucfirst($name) : '';
+    }
+
+    private function normalizeTableName(string $raw): string
+    {
+        $raw = trim($raw);
+        $raw = strtolower($raw);
+
+        $raw = preg_replace('/[^a-z0-9]+/', '_', $raw) ?? '';
+        $raw = preg_replace('/_+/', '_', $raw) ?? '';
+        $raw = trim($raw, '_');
+
+        return $raw;
     }
 
     private function mkdir(string $path): void
