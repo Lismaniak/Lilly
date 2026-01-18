@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Lilly\Console;
 
 use Lilly\Config\Config;
+use Lilly\Console\Commands\DbTableMakeCommand;
+use Lilly\Console\Commands\DbTableRemoveCommand;
+use Lilly\Console\Commands\DbTableUpdateCommand;
 use Lilly\Console\Commands\MakeAppComponentCommand;
 use Lilly\Console\Commands\MakeAppGateCommand;
 use Lilly\Console\Commands\MakeAppPolicyCommand;
@@ -37,6 +40,9 @@ final class ApplicationFactory
         $app->addCommand(new MakeAppGateCommand(projectRoot: $projectRoot));
         $app->addCommand(new RemoveAppPolicyCommand(projectRoot: $projectRoot));
         $app->addCommand(new RemoveAppGateCommand(projectRoot: $projectRoot));
+        $app->addCommand(new DbTableMakeCommand(projectRoot: $projectRoot));
+        $app->addCommand(new DbTableUpdateCommand(projectRoot: $projectRoot));
+        $app->addCommand(new DbTableRemoveCommand(projectRoot: $projectRoot));
 
         return $app;
     }
