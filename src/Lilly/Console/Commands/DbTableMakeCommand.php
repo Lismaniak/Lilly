@@ -6,7 +6,6 @@ namespace Lilly\Console\Commands;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class DbTableMakeCommand extends Command
@@ -20,36 +19,23 @@ final class DbTableMakeCommand extends Command
     protected function configure(): void
     {
         $this
-            ->setDescription('Scaffold a create-table migration for a domain table or an owned table')
+            ->setDescription('Scaffold a create-table migration for a domain table or an owned table (resolved from the domain model)')
             ->addArgument('domain', InputArgument::REQUIRED, 'Domain name, e.g. Users')
-            ->addArgument('table', InputArgument::OPTIONAL, 'Optional. If omitted, defaults to the domain table (users)')
-            ->addOption('owned', null, InputOption::VALUE_NONE, 'Create under Domains/<Domain>/Migrations/owned/<table>');
+            ->addArgument('table', InputArgument::OPTIONAL, 'Optional. If omitted, uses the domain table from the domain model. If provided, must be an owned table from the domain model.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $domain = $this->normalizeDomainName((string) $input->getArgument('domain'));
-        $owned = (bool) $input->getOption('owned');
 
         $tableArg = $input->getArgument('table');
-        $tableRaw = is_string($tableArg) ? $tableArg : '';
+        $tableInput = is_string($tableArg) ? $this->normalizeTableName($tableArg) : '';
 
-        $table = $tableRaw !== ''
-            ? $this->normalizeTableName($tableRaw)
-            : $this->defaultDomainTableName($domain);
-
-        if ($domain === '' || $table === '') {
-            $output->writeln('<error>Usage: db:table:make <Domain> [table] [--owned]</error>');
+        if ($domain === '') {
+            $output->writeln('<error>Usage: db:table:make <Domain> [table]</error>');
             $output->writeln('<comment>Examples:</comment>');
             $output->writeln('<comment>  db:table:make Users</comment>');
-            $output->writeln('<comment>  db:table:make Users accounts</comment>');
-            $output->writeln('<comment>  db:table:make Users user_emails --owned</comment>');
-            return Command::FAILURE;
-        }
-
-        if ($owned && $tableRaw === '') {
-            $output->writeln('<error>When using --owned you must provide a table name.</error>');
-            $output->writeln('<comment>Example: db:table:make Users user_emails --owned</comment>');
+            $output->writeln('<comment>  db:table:make Users user_emails</comment>');
             return Command::FAILURE;
         }
 
@@ -59,30 +45,81 @@ final class DbTableMakeCommand extends Command
             return Command::FAILURE;
         }
 
-        $baseMigrationsDir = "{$domainRoot}/Migrations";
+        $modelFqcn = "Domains\\{$domain}\\Models\\{$domain}";
+        if (!class_exists($modelFqcn)) {
+            $output->writeln("<error>Domain model missing or not autoloadable:</error> {$modelFqcn}");
+            return Command::FAILURE;
+        }
 
+        if (!method_exists($modelFqcn, 'table') || !method_exists($modelFqcn, 'ownedTables')) {
+            $output->writeln("<error>Domain model must define table() and ownedTables():</error> {$modelFqcn}");
+            return Command::FAILURE;
+        }
+
+        $domainTable = $this->normalizeTableName((string) $modelFqcn::table());
+
+        if ($domainTable === '') {
+            $output->writeln("<error>Invalid domain table in {$modelFqcn}::table().</error>");
+            return Command::FAILURE;
+        }
+
+        $ownedRaw = $modelFqcn::ownedTables();
+        $ownedTables = [];
+
+        if (is_array($ownedRaw)) {
+            foreach ($ownedRaw as $t) {
+                if (!is_string($t)) {
+                    continue;
+                }
+                $n = $this->normalizeTableName($t);
+                if ($n !== '') {
+                    $ownedTables[$n] = true;
+                }
+            }
+        }
+
+        $isDomainTable = false;
+        $isOwnedTable = false;
+
+        if ($tableInput === '') {
+            $table = $domainTable;
+            $isDomainTable = true;
+        } else {
+            $table = $tableInput;
+            $isDomainTable = $table === $domainTable;
+            $isOwnedTable = isset($ownedTables[$table]);
+
+            if (!$isDomainTable && !$isOwnedTable) {
+                $output->writeln("<error>Table '{$table}' is not part of domain '{$domain}'.</error>");
+                $output->writeln("<comment>Domain table:</comment> {$domainTable}");
+                if ($ownedTables !== []) {
+                    $output->writeln('<comment>Owned tables:</comment> ' . implode(', ', array_keys($ownedTables)));
+                } else {
+                    $output->writeln('<comment>Owned tables:</comment> (none)');
+                }
+                return Command::FAILURE;
+            }
+        }
+
+        $baseMigrationsDir = "{$domainRoot}/Migrations";
         if (!is_dir($baseMigrationsDir)) {
             mkdir($baseMigrationsDir, 0777, true);
             $output->writeln(' + dir  ' . $this->rel($baseMigrationsDir));
         }
 
-        $tableDir = $owned
+        $tableDir = $isOwnedTable
             ? "{$baseMigrationsDir}/owned/{$table}"
-            : $baseMigrationsDir; // domain table migrations live directly here
+            : $baseMigrationsDir;
 
         if (!is_dir($tableDir)) {
             mkdir($tableDir, 0777, true);
             $output->writeln(' + dir  ' . $this->rel($tableDir));
         }
 
-        // Folder already tells the table name, so filenames do not repeat it.
-        $existingCreate = $owned
-            ? glob($tableDir . '/*_create.php')
-            : glob($tableDir . '/*_create.php');
-
+        $existingCreate = glob($tableDir . '/*_create.php');
         if ($existingCreate !== false && count($existingCreate) > 0) {
             $output->writeln("<error>Create-table migration already exists for table '{$table}'.</error>");
-            $output->writeln("<comment>Use: db:table:update {$domain}" . ($tableRaw !== '' ? " {$table}" : '') . ($owned ? ' --owned' : '') . "</comment>");
+            $output->writeln("<comment>Use: db:table:update {$domain}" . ($isOwnedTable ? " {$table}" : '') . "</comment>");
             return Command::FAILURE;
         }
 
@@ -98,8 +135,8 @@ final class DbTableMakeCommand extends Command
         file_put_contents($path, $this->stub($table));
         $output->writeln(' + file ' . $this->rel($path));
 
-        $folderLabel = $owned ? "owned/{$table}" : $table;
-        $output->writeln("<info>Created migration:</info> {$domain}/{$folderLabel}/{$file}");
+        $label = $isOwnedTable ? "owned/{$table}" : "Migrations";
+        $output->writeln("<info>Created migration:</info> {$domain}/{$label}/{$file}");
 
         return Command::SUCCESS;
     }
@@ -114,12 +151,6 @@ final class DbTableMakeCommand extends Command
         $name = trim($name);
         $name = preg_replace('/[^A-Za-z0-9]/', '', $name) ?? '';
         return $name !== '' ? ucfirst($name) : '';
-    }
-
-    private function defaultDomainTableName(string $domain): string
-    {
-        // Users -> users, TeamMembers -> team_members (still one domain table)
-        return $this->normalizeTableName($domain);
     }
 
     private function normalizeTableName(string $raw): string

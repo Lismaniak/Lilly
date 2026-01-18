@@ -33,6 +33,8 @@ final class MigrationRunner
             return [];
         }
 
+        $pending = $this->sortMigrationsByTimestamp($pending);
+
         $batch = $this->nextBatchNumber($pdo);
 
         $pdo->beginTransaction();
@@ -207,54 +209,79 @@ final class MigrationRunner
             }
         }
 
+        // Do NOT sort here for execution order. We only want stable discovery.
+        // Execution order is handled in run() via sortMigrationsByTimestamp().
         ksort($files);
         return $files;
     }
 
     /**
-     * Collects migrations from:
-     * - <baseDir>/<table>/*.php
+     * Sorts migrations by timestamp prefix in filename.
      *
-     * Writes keys as:
-     * - <namePrefix>/<table>/<file>
+     * Expected filename prefix:
+     *   YYYY_MM_DD_HHMMSS_
      *
-     * @param array<string, string> $files
+     * If missing, timestamp is 0 and will run first (not ideal, but explicit).
+     *
+     * @param array<string, string> $migrations [name => path]
+     * @return array<string, string>
      */
-    private function collectTableMigrations(array &$files, string $domain, string $baseDir, string $namePrefix): void
+    private function sortMigrationsByTimestamp(array $migrations): array
     {
-        $tables = scandir($baseDir);
-        if ($tables === false) {
-            return;
+        $items = [];
+
+        foreach ($migrations as $name => $path) {
+            $base = basename($path);
+
+            $ts = $this->extractTimestampKey($base);
+
+            $items[] = [
+                'name' => $name,
+                'path' => $path,
+                'ts' => $ts,
+                'base' => $base,
+            ];
         }
 
-        foreach ($tables as $table) {
-            if ($table === '.' || $table === '..') {
-                continue;
+        usort($items, static function (array $a, array $b): int {
+            if ($a['ts'] < $b['ts']) {
+                return -1;
             }
-            if (str_starts_with($table, '.')) {
-                continue;
-            }
-
-            $tableDir = $baseDir . '/' . $table;
-            if (!is_dir($tableDir)) {
-                continue;
+            if ($a['ts'] > $b['ts']) {
+                return 1;
             }
 
-            $matches = glob($tableDir . '/*.php');
-            if ($matches === false) {
-                continue;
+            // tie-breakers for stability
+            $c = strcmp((string) $a['base'], (string) $b['base']);
+            if ($c !== 0) {
+                return $c;
             }
 
-            foreach ($matches as $path) {
-                $file = basename($path);
-                if ($file === '' || !str_ends_with($file, '.php')) {
-                    continue;
-                }
+            return strcmp((string) $a['name'], (string) $b['name']);
+        });
 
-                $name = $namePrefix . '/' . $table . '/' . $file;
-                $files[$name] = $path;
-            }
+        $out = [];
+        foreach ($items as $it) {
+            $out[$it['name']] = $it['path'];
         }
+
+        return $out;
+    }
+
+    /**
+     * Turns "2026_01_18_141851_create.php" into an integer sort key:
+     * 20260118141851
+     */
+    private function extractTimestampKey(string $filename): int
+    {
+        if (preg_match('/^(\d{4})_(\d{2})_(\d{2})_(\d{6})_/', $filename, $m) !== 1) {
+            return 0;
+        }
+
+        $key = $m[1] . $m[2] . $m[3] . $m[4];
+
+        // safe int conversion (fits in 64-bit)
+        return (int) $key;
     }
 
     /**

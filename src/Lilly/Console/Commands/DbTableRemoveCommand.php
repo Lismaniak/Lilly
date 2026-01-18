@@ -6,7 +6,6 @@ namespace Lilly\Console\Commands;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class DbTableRemoveCommand extends Command
@@ -20,21 +19,23 @@ final class DbTableRemoveCommand extends Command
     protected function configure(): void
     {
         $this
-            ->setDescription('Scaffold a drop-table migration for a domain-owned table')
+            ->setDescription('Scaffold a drop-table migration for a domain table or an owned table (resolved from the domain model)')
             ->addArgument('domain', InputArgument::REQUIRED, 'Domain name, e.g. Users')
-            ->addArgument('table', InputArgument::REQUIRED, 'Table name, e.g. user_emails')
-            ->addOption('owned', null, InputOption::VALUE_NONE, 'Use Domains/<Domain>/Migrations/owned/<table>');
+            ->addArgument('table', InputArgument::OPTIONAL, 'Optional. If omitted, removes the domain table. If provided, must be an owned table.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $domain = $this->normalizeDomainName((string) $input->getArgument('domain'));
-        $table = $this->normalizeTableName((string) $input->getArgument('table'));
-        $owned = (bool) $input->getOption('owned');
 
-        if ($domain === '' || $table === '') {
-            $output->writeln('<error>Usage: db:table:remove <Domain> <table> [--owned]</error>');
-            $output->writeln('<comment>Example: db:table:remove Users user_emails --owned</comment>');
+        $tableArg = $input->getArgument('table');
+        $tableInput = is_string($tableArg) ? $this->normalizeTableName($tableArg) : '';
+
+        if ($domain === '') {
+            $output->writeln('<error>Usage: db:table:remove <Domain> [owned_table]</error>');
+            $output->writeln('<comment>Examples:</comment>');
+            $output->writeln('<comment>  db:table:remove Users</comment>');
+            $output->writeln('<comment>  db:table:remove Users user_emails</comment>');
             return Command::FAILURE;
         }
 
@@ -44,25 +45,86 @@ final class DbTableRemoveCommand extends Command
             return Command::FAILURE;
         }
 
+        $modelFqcn = "Domains\\{$domain}\\Models\\{$domain}";
+        if (!class_exists($modelFqcn)) {
+            $output->writeln("<error>Domain model missing or not autoloadable:</error> {$modelFqcn}");
+            return Command::FAILURE;
+        }
+
+        if (!method_exists($modelFqcn, 'table') || !method_exists($modelFqcn, 'ownedTables')) {
+            $output->writeln("<error>Domain model must define table() and ownedTables():</error> {$modelFqcn}");
+            return Command::FAILURE;
+        }
+
+        $domainTable = $this->normalizeTableName((string) $modelFqcn::table());
+        if ($domainTable === '') {
+            $output->writeln("<error>Invalid domain table() value in model:</error> {$modelFqcn}");
+            return Command::FAILURE;
+        }
+
+        $ownedRaw = $modelFqcn::ownedTables();
+        $ownedTables = [];
+
+        if (is_array($ownedRaw)) {
+            foreach ($ownedRaw as $t) {
+                if (!is_string($t)) {
+                    continue;
+                }
+                $n = $this->normalizeTableName($t);
+                if ($n !== '') {
+                    $ownedTables[$n] = true;
+                }
+            }
+        }
+
+        // Resolve target table:
+        // - no [table] arg => domain table
+        // - [table] arg => must be owned (we do NOT allow passing the domain table name explicitly)
+        if ($tableInput === '') {
+            $table = $domainTable;
+            $isDomainTable = true;
+            $isOwnedTable = false;
+        } else {
+            $table = $tableInput;
+            $isDomainTable = false;
+            $isOwnedTable = isset($ownedTables[$table]);
+        }
+
+        if (!$isDomainTable && !$isOwnedTable) {
+            $output->writeln("<error>Table '{$table}' is not an owned table of domain '{$domain}'.</error>");
+            $output->writeln("<comment>Domain table:</comment> {$domainTable}");
+            if ($ownedTables !== []) {
+                $output->writeln('<comment>Owned tables:</comment> ' . implode(', ', array_keys($ownedTables)));
+            } else {
+                $output->writeln('<comment>Owned tables:</comment> (none)');
+            }
+            return Command::FAILURE;
+        }
+
         $baseMigrationsDir = "{$domainRoot}/Migrations";
-        $tableDir = $owned
+        if (!is_dir($baseMigrationsDir)) {
+            mkdir($baseMigrationsDir, 0777, true);
+            $output->writeln(' + dir  ' . $this->rel($baseMigrationsDir));
+        }
+
+        $tableDir = $isOwnedTable
             ? "{$baseMigrationsDir}/owned/{$table}"
-            : "{$baseMigrationsDir}/{$table}";
+            : $baseMigrationsDir;
 
         if (!is_dir($tableDir)) {
             mkdir($tableDir, 0777, true);
             $output->writeln(' + dir  ' . $this->rel($tableDir));
         }
 
-        $create = glob($tableDir . '/*_create_' . $table . '.php');
+        $create = glob($tableDir . '/*_create.php');
         if ($create === false || count($create) === 0) {
             $output->writeln("<error>No create-table migration found for table '{$table}'.</error>");
-            $output->writeln("<comment>Run: db:table:make {$domain} {$table}" . ($owned ? ' --owned' : '') . "</comment>");
+            $output->writeln('<comment>Run:</comment> db:table:make ' . $domain . ($isOwnedTable ? " {$table} --owned" : ''));
             return Command::FAILURE;
         }
 
         $stamp = gmdate('Y_m_d_His');
-        $file = "{$stamp}_remove_{$table}.php";
+        $file = "{$stamp}_remove.php";
         $path = "{$tableDir}/{$file}";
 
         if (is_file($path)) {
@@ -71,8 +133,10 @@ final class DbTableRemoveCommand extends Command
         }
 
         file_put_contents($path, $this->stub($table));
+
         $output->writeln(' + file ' . $this->rel($path));
-        $output->writeln("<info>Created migration:</info> {$domain}/" . ($owned ? "owned/{$table}" : $table) . "/{$file}");
+        $label = $isOwnedTable ? "owned/{$table}" : "Migrations";
+        $output->writeln("<info>Created migration:</info> {$domain}/{$label}/{$file}");
 
         return Command::SUCCESS;
     }

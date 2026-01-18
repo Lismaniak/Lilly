@@ -20,9 +20,9 @@ final class DbTableUpdateCommand extends Command
     protected function configure(): void
     {
         $this
-            ->setDescription('Scaffold an alter-table migration (add columns only, MVP). Domain table by default, owned when [table] is provided.')
+            ->setDescription('Scaffold an alter-table migration (add columns only, MVP). Table is resolved from the domain model.')
             ->addArgument('domain', InputArgument::REQUIRED, 'Domain name, e.g. Users')
-            ->addArgument('table', InputArgument::OPTIONAL, 'Owned table name, e.g. user_emails (optional)')
+            ->addArgument('table', InputArgument::OPTIONAL, 'Optional. If omitted, updates the domain table from the domain model. If provided, must be an owned table from the domain model.')
             ->addOption('desc', null, InputOption::VALUE_REQUIRED, 'Filename description, e.g. add_verified_at');
     }
 
@@ -31,13 +31,14 @@ final class DbTableUpdateCommand extends Command
         $domain = $this->normalizeDomainName((string) $input->getArgument('domain'));
 
         $tableArg = $input->getArgument('table');
-        $tableRaw = is_string($tableArg) ? trim($tableArg) : '';
+        $tableInput = is_string($tableArg) ? $this->normalizeTableName($tableArg) : '';
 
         $descOpt = $input->getOption('desc');
         $descRaw = is_string($descOpt) ? trim($descOpt) : '';
+        $desc = $this->normalizeDesc($descRaw);
 
         if ($domain === '') {
-            $output->writeln('<error>Usage: db:table:update <Domain> [owned_table]</error>');
+            $output->writeln('<error>Usage: db:table:update <Domain> [table] [--desc something]</error>');
             $output->writeln('<comment>Examples:</comment>');
             $output->writeln('<comment>  db:table:update Users</comment>');
             $output->writeln('<comment>  db:table:update Users --desc add_email</comment>');
@@ -52,53 +53,100 @@ final class DbTableUpdateCommand extends Command
             return Command::FAILURE;
         }
 
+        $modelFqcn = "Domains\\{$domain}\\Models\\{$domain}";
+        if (!class_exists($modelFqcn)) {
+            $output->writeln("<error>Domain model missing or not autoloadable:</error> {$modelFqcn}");
+            return Command::FAILURE;
+        }
+
+        if (!method_exists($modelFqcn, 'table') || !method_exists($modelFqcn, 'ownedTables')) {
+            $output->writeln("<error>Domain model must define table() and ownedTables():</error> {$modelFqcn}");
+            return Command::FAILURE;
+        }
+
+        $domainTable = $this->normalizeTableName((string) $modelFqcn::table());
+        if ($domainTable === '') {
+            $output->writeln("<error>Invalid domain table in {$modelFqcn}::table().</error>");
+            return Command::FAILURE;
+        }
+
+        $ownedRaw = $modelFqcn::ownedTables();
+        $ownedTables = [];
+
+        if (is_array($ownedRaw)) {
+            foreach ($ownedRaw as $t) {
+                if (!is_string($t)) {
+                    continue;
+                }
+                $n = $this->normalizeTableName($t);
+                if ($n !== '') {
+                    $ownedTables[$n] = true;
+                }
+            }
+        }
+
+        $isOwnedTable = false;
+
+        if ($tableInput === '') {
+            $table = $domainTable;
+        } else {
+            $table = $tableInput;
+
+            if ($table === $domainTable) {
+                // Allow explicit domain table name, but it is still treated as domain table update.
+                $isOwnedTable = false;
+            } elseif (isset($ownedTables[$table])) {
+                $isOwnedTable = true;
+            } else {
+                $output->writeln("<error>Table '{$table}' is not part of domain '{$domain}'.</error>");
+                $output->writeln("<comment>Domain table:</comment> {$domainTable}");
+                if ($ownedTables !== []) {
+                    $output->writeln('<comment>Owned tables:</comment> ' . implode(', ', array_keys($ownedTables)));
+                } else {
+                    $output->writeln('<comment>Owned tables:</comment> (none)');
+                }
+                return Command::FAILURE;
+            }
+        }
+
         $baseMigrationsDir = "{$domainRoot}/Migrations";
         if (!is_dir($baseMigrationsDir)) {
             mkdir($baseMigrationsDir, 0777, true);
             $output->writeln(' + dir  ' . $this->rel($baseMigrationsDir));
         }
 
-        // Domain table update (default)
-        if ($tableRaw === '') {
-            $table = $this->defaultDomainTableName($domain);
-            $desc = $this->normalizeDesc($descRaw);
+        $dir = $isOwnedTable
+            ? "{$baseMigrationsDir}/owned/{$table}"
+            : $baseMigrationsDir;
 
-            $tableDir = $baseMigrationsDir;
-
-            if (!$this->hasCreateMigration($tableDir)) {
-                $output->writeln("<error>No create-table migration found for domain table '{$table}'.</error>");
-                $output->writeln("<comment>Run: db:table:make {$domain}</comment>");
+        if (!is_dir($dir)) {
+            if ($isOwnedTable) {
+                $output->writeln("<error>Owned table folder does not exist:</error> {$this->rel($dir)}");
+                $output->writeln("<comment>Create it first with: db:table:make {$domain} {$table}</comment>");
                 return Command::FAILURE;
             }
 
-            return $this->writeUpdateMigration($output, $tableDir, $domain, 'Migrations', $table, $desc);
+            // Domain migrations folder exists by now, so this should be unreachable.
+            mkdir($dir, 0777, true);
+            $output->writeln(' + dir  ' . $this->rel($dir));
         }
 
-        // If [table] is provided, we treat it as owned table name.
-        // SAFETY RULE: we do NOT create the folder. Owned table must already exist and have a create migration.
-        $table = $this->normalizeTableName($tableRaw);
-        if ($table === '') {
-            $output->writeln('<error>Invalid table name.</error>');
+        if (!$this->hasCreateMigration($dir)) {
+            $output->writeln("<error>No create-table migration found for table '{$table}'.</error>");
+            $output->writeln("<comment>Run: db:table:make {$domain}" . ($isOwnedTable ? " {$table}" : '') . "</comment>");
             return Command::FAILURE;
         }
 
-        $desc = $this->normalizeDesc($descRaw);
+        $label = $isOwnedTable ? "owned/{$table}" : 'Migrations';
 
-        $ownedDir = "{$baseMigrationsDir}/owned/{$table}";
-
-        if (!is_dir($ownedDir)) {
-            $output->writeln("<error>Owned table folder does not exist:</error> {$this->rel($ownedDir)}");
-            $output->writeln("<comment>Create it first with: db:table:make {$domain} {$table}</comment>");
-            return Command::FAILURE;
-        }
-
-        if (!$this->hasCreateMigration($ownedDir)) {
-            $output->writeln("<error>No create-table migration found for owned table '{$table}'.</error>");
-            $output->writeln("<comment>Run: db:table:make {$domain} {$table}</comment>");
-            return Command::FAILURE;
-        }
-
-        return $this->writeUpdateMigration($output, $ownedDir, $domain, "owned/{$table}", $table, $desc);
+        return $this->writeUpdateMigration(
+            output: $output,
+            dir: $dir,
+            domain: $domain,
+            label: $label,
+            table: $table,
+            desc: $desc
+        );
     }
 
     private function writeUpdateMigration(
@@ -141,11 +189,6 @@ final class DbTableUpdateCommand extends Command
         $name = trim($name);
         $name = preg_replace('/[^A-Za-z0-9]/', '', $name) ?? '';
         return $name !== '' ? ucfirst($name) : '';
-    }
-
-    private function defaultDomainTableName(string $domain): string
-    {
-        return $this->normalizeTableName($domain);
     }
 
     private function normalizeTableName(string $raw): string
