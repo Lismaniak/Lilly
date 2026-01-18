@@ -181,7 +181,7 @@ final class DbTableUpdateCommand extends Command
 
     private function stub(string $table): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Database\\Schema\\Schema;\nuse Lilly\\Database\\Schema\\Blueprint;\n\nreturn function (PDO \$pdo): void {\n    \$schema = new Schema(\$pdo);\n\n    \$schema->table('{$table}', function (Blueprint \$t): void {\n        // \$t->string('example');\n    });\n};\n";
+        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Database\\Schema\\Schema;\nuse Lilly\\Database\\Schema\\Blueprint;\n\nreturn function (PDO \$pdo): void {\n    \$schema = new Schema(\$pdo);\n\n    \$schema->table('{$table}', function (Blueprint \$t): void {\n        // Add:\n        // \$t->string('email')->unique();\n\n        // Drop:\n        // \$t->drop('old_column');\n\n        // Rename:\n        // \$t->rename('old_name', 'new_name');\n\n        // Change (type/nullable/default):\n        // \$t->change('status')->type('string:20')->nullable(false)->default('active');\n    });\n};\n";
     }
 
     private function normalizeDomainName(string $name): string

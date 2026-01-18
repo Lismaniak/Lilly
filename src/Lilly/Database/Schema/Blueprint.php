@@ -12,6 +12,21 @@ final class Blueprint
      */
     private array $columns = [];
 
+    /**
+     * @var list<string>
+     */
+    private array $dropColumns = [];
+
+    /**
+     * @var list<array{from: string, to: string}>
+     */
+    private array $renameColumns = [];
+
+    /**
+     * @var list<ColumnChange>
+     */
+    private array $changeColumns = [];
+
     public function __construct(
         private readonly string $table,
         private readonly string $mode = 'create' // create|alter
@@ -33,6 +48,30 @@ final class Blueprint
     public function columns(): array
     {
         return $this->columns;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function drops(): array
+    {
+        return $this->dropColumns;
+    }
+
+    /**
+     * @return list<array{from: string, to: string}>
+     */
+    public function renames(): array
+    {
+        return $this->renameColumns;
+    }
+
+    /**
+     * @return list<ColumnChange>
+     */
+    public function changes(): array
+    {
+        return $this->changeColumns;
     }
 
     public function id(string $name = 'id'): Column
@@ -81,6 +120,36 @@ final class Blueprint
     {
         $this->timestamp('created_at');
         $this->timestamp('updated_at')->nullable();
+    }
+
+    public function drop(string $name): void
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return;
+        }
+
+        $this->dropColumns[] = $name;
+    }
+
+    public function rename(string $from, string $to): void
+    {
+        $from = trim($from);
+        $to = trim($to);
+
+        if ($from === '' || $to === '' || $from === $to) {
+            return;
+        }
+
+        $this->renameColumns[] = ['from' => $from, 'to' => $to];
+    }
+
+    public function change(string $name): ColumnChange
+    {
+        $name = trim($name);
+        $c = new ColumnChange($name !== '' ? $name : '__invalid__');
+        $this->changeColumns[] = $c;
+        return $c;
     }
 
     public function ensureHasColumnsForCreate(): void
