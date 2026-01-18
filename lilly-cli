@@ -8,7 +8,22 @@ if (PHP_VERSION_ID < 80300) {
 
 require __DIR__ . '/vendor/autoload.php';
 
+use Lilly\Config\EnvLoader;
+use Lilly\Config\Config;
+
+EnvLoader::load(projectRoot: __DIR__);
+
+$config = Config::fromEnv();
+
+var_dump($config);
+exit;
+
 use Lilly\Console\ApplicationFactory;
 
-$application = ApplicationFactory::create(projectRoot: __DIR__);
+$application = ApplicationFactory::create(
+    projectRoot: __DIR__,
+    config: $config,
+);
+
 exit($application->run());
+

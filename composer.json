@@ -13,7 +13,10 @@
       "Lilly\\": "src/Lilly/",
       "Domains\\": "src/Domains/",
       "App\\": "src/App/"
-    }
+    },
+    "files": [
+      "src/Lilly/Support/helpers.php"
+    ]
   },
   "autoload-dev": {
     "psr-4": {

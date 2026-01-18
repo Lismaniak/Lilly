@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Lilly\Http;
 
+use Lilly\Config\Config;
 use Lilly\Security\SecurityFactory;
 use RuntimeException;
 
@@ -11,7 +12,8 @@ final class Kernel
     private Router $router;
 
     public function __construct(
-        private readonly string $projectRoot
+        private readonly string $projectRoot,
+        private readonly Config $config,
     ) {
         $this->router = new Router();
         $this->registerRoutes($this->router);

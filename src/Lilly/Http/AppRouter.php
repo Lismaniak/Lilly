@@ -14,7 +14,7 @@ final readonly class AppRouter
      */
     public function get(string $path, \Closure $handler, array $gates = []): void
     {
-        $this->router->get($path, $handler, domains: ['app'], gates: $gates);
+        $this->router->get($path, $handler, domains: [], gates: $gates);
     }
 
     /**
@@ -22,6 +22,6 @@ final readonly class AppRouter
      */
     public function post(string $path, \Closure $handler, array $gates = []): void
     {
-        $this->router->post($path, $handler, domains: ['app'], gates: $gates);
+        $this->router->post($path, $handler, domains: [], gates: $gates);
     }
 }

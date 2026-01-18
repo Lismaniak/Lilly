@@ -147,17 +147,16 @@ final class SecurityFactory
 
         $policyFqcn = 'App\\Policies\\AppPolicy';
 
-        if (!class_exists($policyFqcn)) {
-            throw new RuntimeException("Missing policy class {$policyFqcn}");
+        // App policy is optional. If missing, App routes can still exist.
+        if (class_exists($policyFqcn)) {
+            $policy = new $policyFqcn();
+
+            if (!$policy instanceof DomainPolicy) {
+                throw new RuntimeException("{$policyFqcn} must implement " . DomainPolicy::class);
+            }
+
+            $policies->register($policy);
         }
-
-        $policy = new $policyFqcn();
-
-        if (!$policy instanceof DomainPolicy) {
-            throw new RuntimeException("{$policyFqcn} must implement " . DomainPolicy::class);
-        }
-
-        $policies->register($policy);
 
         foreach ($this->discoverAppGateClasses() as $gateFqcn) {
             if (!class_exists($gateFqcn)) {

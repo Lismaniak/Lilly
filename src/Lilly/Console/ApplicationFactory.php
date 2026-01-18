@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Lilly\Console;
 
+use Lilly\Config\Config;
 use Lilly\Console\Commands\MakeAppComponentCommand;
 use Lilly\Console\Commands\MakeAppGateCommand;
 use Lilly\Console\Commands\MakeAppPolicyCommand;
@@ -20,7 +21,7 @@ use Symfony\Component\Console\Application;
 
 final class ApplicationFactory
 {
-    public static function create(string $projectRoot): Application
+    public static function create(string $projectRoot, Config $config): Application
     {
         $app = new Application('Lilly', '0.1.0');
 

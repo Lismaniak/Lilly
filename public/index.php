@@ -4,10 +4,23 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 
 use Lilly\Http\Request;
-use Lilly\Http\Response;
 use Lilly\Http\Kernel;
+use Lilly\Config\EnvLoader;
+use Lilly\Config\Config;
 
-$kernel = new Kernel(projectRoot: realpath(__DIR__ . '/..') ?: (__DIR__ . '/..'));
+EnvLoader::load(projectRoot: realpath(__DIR__ . '/..') ?: (__DIR__ . '/..'));
+
+$config = Config::fromEnv();
+
+dd($config);
+
+$projectRoot = realpath(__DIR__ . '/..') ?: (__DIR__ . '/..');
+
+$kernel = new Kernel(
+    projectRoot: $projectRoot,
+    config: $config,
+);
+
 
 $request = Request::fromGlobals();
 
