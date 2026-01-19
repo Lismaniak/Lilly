@@ -24,6 +24,7 @@ final class SchemaSyncPlanner
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
      *   adds:list<array<string,mixed>>,
+     *   changes:list<array{name:string,type:?string,nullable:?bool,default:mixed,unique:?bool}>,
      *   foreign_keys_adds:list<array{column:string,references:string,on:string,onDelete:string|null}>,
      *   foreign_keys_drops:list<string>
      * }
@@ -34,7 +35,14 @@ final class SchemaSyncPlanner
         $desiredCols = $desiredDef['columns'] ?? [];
 
         if (!is_array($approvedCols) || !is_array($desiredCols)) {
-            return ['drops' => [], 'renames' => [], 'adds' => [], 'foreign_keys_adds' => []];
+            return [
+                'drops' => [],
+                'renames' => [],
+                'adds' => [],
+                'changes' => [],
+                'foreign_keys_adds' => [],
+                'foreign_keys_drops' => [],
+            ];
         }
 
         $approvedSet = [];     // name => true
@@ -51,6 +59,18 @@ final class SchemaSyncPlanner
                 $approvedSet[$n] = true;
                 $approvedNames[] = $n;
             }
+        }
+
+        $approvedByName = []; // name => colDef
+        foreach ($approvedCols as $c) {
+            if (!is_array($c) || !isset($c['name'])) {
+                continue;
+            }
+            $n = trim((string) $c['name']);
+            if ($n === '') {
+                continue;
+            }
+            $approvedByName[$n] = $c;
         }
 
         $desiredByName = []; // name => colDef
@@ -72,6 +92,7 @@ final class SchemaSyncPlanner
 
         $renames = [];
         $protected = []; // columns participating in rename, never drop in same plan
+        $renameFromForTo = []; // to => from
 
         $was = $desiredDef['was'] ?? [];
         if (!is_array($was)) {
@@ -125,6 +146,7 @@ final class SchemaSyncPlanner
                 }
 
                 $renames[] = ['from' => $from, 'to' => $to];
+                $renameFromForTo[$to] = $from;
 
                 $protected[$from] = true;
                 $protected[$to] = true;
@@ -159,15 +181,87 @@ final class SchemaSyncPlanner
 
         sort($drops);
 
+        $changes = $this->buildColumnChanges($desiredByName, $approvedByName, $renameFromForTo);
+
         [$foreignKeyAdds, $foreignKeyDrops] = $this->planForeignKeyDiffs($approvedDef, $desiredDef);
 
         return [
             'drops' => $drops,
             'renames' => $renames,
             'adds' => $adds,
+            'changes' => $changes,
             'foreign_keys_adds' => $foreignKeyAdds,
             'foreign_keys_drops' => $foreignKeyDrops,
         ];
+    }
+
+    /**
+     * @param array<string,array<string,mixed>> $desiredByName
+     * @param array<string,array<string,mixed>> $approvedByName
+     * @param array<string,string> $renameFromForTo
+     * @return list<array{name:string,type:?string,nullable:?bool,default:mixed,unique:?bool}>
+     */
+    private function buildColumnChanges(array $desiredByName, array $approvedByName, array $renameFromForTo): array
+    {
+        $changes = [];
+
+        foreach ($desiredByName as $name => $desiredCol) {
+            $approvedName = $name;
+            if (!isset($approvedByName[$approvedName]) && isset($renameFromForTo[$name])) {
+                $approvedName = $renameFromForTo[$name];
+            }
+
+            if (!isset($approvedByName[$approvedName])) {
+                continue;
+            }
+
+            $approvedCol = $approvedByName[$approvedName];
+
+            $typeDiff = (string) ($approvedCol['type'] ?? '') !== (string) ($desiredCol['type'] ?? '');
+            $nullableDiff = (bool) ($approvedCol['nullable'] ?? false) !== (bool) ($desiredCol['nullable'] ?? false);
+            $defaultDiff = $this->defaultsDiffer($approvedCol['default'] ?? null, $desiredCol['default'] ?? null);
+            $uniqueDiff = (bool) ($approvedCol['unique'] ?? false) !== (bool) ($desiredCol['unique'] ?? false);
+
+            if (!$typeDiff && !$nullableDiff && !$defaultDiff && !$uniqueDiff) {
+                continue;
+            }
+
+            $change = [
+                'name' => $name,
+                'type' => null,
+                'nullable' => null,
+                'default' => '__KEEP__',
+                'unique' => null,
+            ];
+
+            $needsDefinitionChange = $typeDiff || $nullableDiff || $defaultDiff;
+            if ($needsDefinitionChange) {
+                $change['type'] = (string) ($desiredCol['type'] ?? '');
+            }
+            if ($nullableDiff) {
+                $change['nullable'] = (bool) ($desiredCol['nullable'] ?? false);
+            }
+            if ($defaultDiff) {
+                $change['default'] = $desiredCol['default'] ?? null;
+            }
+            if ($uniqueDiff) {
+                $change['unique'] = (bool) ($desiredCol['unique'] ?? false);
+            }
+
+            $changes[] = $change;
+        }
+
+        usort(
+            $changes,
+            static fn (array $a, array $b): int => ((string) ($a['name'] ?? '')) <=> ((string) ($b['name'] ?? ''))
+        );
+
+        return $changes;
+    }
+
+    private function defaultsDiffer(mixed $approved, mixed $desired): bool
+    {
+        return $approved !== $desired;
     }
 
     /**
