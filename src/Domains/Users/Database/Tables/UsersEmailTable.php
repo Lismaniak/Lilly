@@ -17,6 +17,7 @@ final class UsersEmailTable
         $t->id(); // BIGINT
         $t->unsignedBigInteger('user_id'); // MUST match users.id
         $t->string('email')->unique();
+        $t->string('email2')->unique();
         $t->timestamps();
     }
 

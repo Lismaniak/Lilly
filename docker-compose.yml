@@ -17,6 +17,7 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_DATABASE: lilly
+      DB_SANDBOX_DATABASE: lilly_sandbox
       DB_USERNAME: lilly
       DB_PASSWORD: lilly
 
@@ -29,10 +30,12 @@ services:
       MYSQL_USER: lilly
       MYSQL_PASSWORD: lilly
       MYSQL_ROOT_PASSWORD: root
+      MYSQL_INITDB_SKIP_TZINFO: "1"
     ports:
       - "3306:3306"
     volumes:
       - lilly_mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci

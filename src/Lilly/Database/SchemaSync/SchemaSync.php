@@ -103,7 +103,7 @@ final class SchemaSync
             $lines[] = "<info>{$d}:</info> generated pending plan {$hash}";
             $lines[] = " - pending dir " . $this->rel($pendingDir);
             $lines[] = " - files: {$created}";
-            $lines[] = "Run: <comment>db:sync:accept {$d} {$hash}</comment> or <comment>db:sync:discard {$d} {$hash}</comment>";
+            $lines[] = "Run: <comment>db:sync:apply {$d} {$hash}</comment> or <comment>db:sync:discard {$d} {$hash}</comment>";
         }
 
         return new SchemaSyncResult(true, $lines);
@@ -309,18 +309,30 @@ final class SchemaSync
 
     private function createTableMigrationStub(string $domain, string $tableClass): string
     {
+        $ns = "Domains\\{$domain}\\Database\\Migrations";
+
+        $short = $tableClass;
+        $pos = strrpos($tableClass, '\\');
+        if ($pos !== false) {
+            $short = substr($tableClass, $pos + 1);
+        }
+
         $lines = [];
         $lines[] = "<?php";
         $lines[] = "declare(strict_types=1);";
         $lines[] = "";
+        $lines[] = "namespace {$ns};";
+        $lines[] = "";
+        $lines[] = "use PDO;";
         $lines[] = "use Lilly\\Database\\Schema\\Blueprint;";
         $lines[] = "use Lilly\\Database\\Schema\\Schema;";
+        $lines[] = "use {$tableClass};";
         $lines[] = "";
         $lines[] = "return function (PDO \$pdo): void {";
         $lines[] = "    \$schema = new Schema(\$pdo);";
         $lines[] = "";
-        $lines[] = "    \$schema->create({$tableClass}::name(), function (Blueprint \$t): void {";
-        $lines[] = "        {$tableClass}::define(\$t);";
+        $lines[] = "    \$schema->create({$short}::name(), function (Blueprint \$t): void {";
+        $lines[] = "        {$short}::define(\$t);";
         $lines[] = "    });";
         $lines[] = "};";
         $lines[] = "";
