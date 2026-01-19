@@ -122,6 +122,7 @@ final class SchemaSync
                     && ($ops['renames'] ?? []) === []
                     && ($ops['adds'] ?? []) === []
                     && ($ops['foreign_keys_adds'] ?? []) === []
+                    && ($ops['foreign_keys_drops'] ?? []) === []
                 ) {
                     continue;
                 }

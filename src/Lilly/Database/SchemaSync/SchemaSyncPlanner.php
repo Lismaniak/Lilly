@@ -24,7 +24,8 @@ final class SchemaSyncPlanner
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
      *   adds:list<array<string,mixed>>,
-     *   foreign_keys_adds:list<array{column:string,references:string,on:string,onDelete:string|null}>
+     *   foreign_keys_adds:list<array{column:string,references:string,on:string,onDelete:string|null}>,
+     *   foreign_keys_drops:list<string>
      * }
      */
     public function buildUpdateOps(array $approvedDef, array $desiredDef): array
@@ -158,20 +159,24 @@ final class SchemaSyncPlanner
 
         sort($drops);
 
-        $foreignKeyAdds = $this->planForeignKeyAdds($approvedDef, $desiredDef);
+        [$foreignKeyAdds, $foreignKeyDrops] = $this->planForeignKeyDiffs($approvedDef, $desiredDef);
 
         return [
             'drops' => $drops,
             'renames' => $renames,
             'adds' => $adds,
             'foreign_keys_adds' => $foreignKeyAdds,
+            'foreign_keys_drops' => $foreignKeyDrops,
         ];
     }
 
     /**
-     * @return list<array{column:string,references:string,on:string,onDelete:string|null}>
+     * @return array{
+     *   0:list<array{column:string,references:string,on:string,onDelete:string|null}>,
+     *   1:list<string>
+     * }
      */
-    private function planForeignKeyAdds(array $approvedDef, array $desiredDef): array
+    private function planForeignKeyDiffs(array $approvedDef, array $desiredDef): array
     {
         $approvedFks = $approvedDef['foreign_keys'] ?? [];
         $desiredFks = $desiredDef['foreign_keys'] ?? [];
@@ -221,19 +226,14 @@ final class SchemaSyncPlanner
             }
         }
 
-        $removals = [];
-        foreach ($approvedMap as $k => $_fk) {
+        $drops = [];
+        foreach ($approvedMap as $k => $fk) {
             if (!isset($desiredMap[$k])) {
-                $removals[] = $k;
+                $column = trim((string) ($fk['column'] ?? ''));
+                if ($column !== '') {
+                    $drops[] = $column;
+                }
             }
-        }
-
-        if ($removals !== []) {
-            throw new RuntimeException(
-                "Foreign key removals/changes are not supported by schema sync yet. " .
-                "Create a manual migration that drops/recreates constraints. " .
-                "Missing keys: " . implode(', ', $removals)
-            );
         }
 
         usort(
@@ -242,6 +242,8 @@ final class SchemaSyncPlanner
                 <=> ((string) ($b['column'] ?? '') . '|' . (string) ($b['on'] ?? ''))
         );
 
-        return $adds;
+        sort($drops);
+
+        return [$adds, $drops];
     }
 }

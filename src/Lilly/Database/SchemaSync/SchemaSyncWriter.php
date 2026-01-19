@@ -23,7 +23,8 @@ final class SchemaSyncWriter
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
      *   adds:list<array<string,mixed>>,
-     *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>
+     *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>,
+     *   foreign_keys_drops?:list<string>
      * } $ops
      */
     public function writeUpdateMigration(string $pendingDir, string $domain, string $tableName, array $ops): string
@@ -93,7 +94,8 @@ final class SchemaSyncWriter
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
      *   adds:list<array<string,mixed>>,
-     *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>
+     *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>,
+     *   foreign_keys_drops?:list<string>
      * } $ops
      */
     private function updateTableMigrationStub(string $domain, string $tableName, array $ops): string
@@ -107,6 +109,10 @@ final class SchemaSyncWriter
         $fkAdds = $ops['foreign_keys_adds'] ?? [];
         if (!is_array($fkAdds)) {
             $fkAdds = [];
+        }
+        $fkDrops = $ops['foreign_keys_drops'] ?? [];
+        if (!is_array($fkDrops)) {
+            $fkDrops = [];
         }
 
         $lines = [];
@@ -124,15 +130,17 @@ final class SchemaSyncWriter
         $lines[] = "";
         $lines[] = "    \$schema->table('" . $this->escapeSingleQuoted($tableName) . "', function (Blueprint \$t): void {";
 
+        $this->emitDropForeignKeyLines($lines, $tableName, $fkDrops);
         $this->emitDropLines($lines, $drops);
         $this->emitRenameLines($lines, $renames);
 
+        $hadFkDrops = $fkDrops !== [];
         $hadDrops = $drops !== [];
         $hadRenames = $renames !== [];
         $hadAdds = $adds !== [];
         $hadFkAdds = $fkAdds !== [];
 
-        if (($hadDrops || $hadRenames) && ($hadAdds || $hadFkAdds)) {
+        if (($hadFkDrops || $hadDrops || $hadRenames) && ($hadAdds || $hadFkAdds)) {
             $this->ensureBlankLine($lines);
         }
 
@@ -164,6 +172,29 @@ final class SchemaSyncWriter
 
             $lines[] = "        // DROP inferred: removed from define()";
             $lines[] = "        \$t->drop('{$name}');";
+            $lines[] = "";
+        }
+
+        if ($drops !== [] && end($lines) === "") {
+            array_pop($lines);
+        }
+    }
+
+    /**
+     * @param list<string> $drops
+     */
+    private function emitDropForeignKeyLines(array &$lines, string $tableName, array $drops): void
+    {
+        foreach ($drops as $column) {
+            $column = $this->escapeSingleQuoted((string) $column);
+            if ($column === '') {
+                continue;
+            }
+
+            $fkName = $this->escapeSingleQuoted($this->foreignKeyName($tableName, $column));
+
+            $lines[] = "        // DROP FK inferred: removed from foreignKeys()";
+            $lines[] = "        \$t->dropForeignKey('{$fkName}');";
             $lines[] = "";
         }
 
@@ -369,5 +400,10 @@ final class SchemaSyncWriter
     private function escapeSingleQuoted(string $s): string
     {
         return str_replace("'", "\\'", $s);
+    }
+
+    private function foreignKeyName(string $table, string $col): string
+    {
+        return "{$table}_{$col}_fk";
     }
 }
