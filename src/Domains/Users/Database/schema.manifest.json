@@ -1,7 +1,7 @@
 {
     "domain": "Users",
-    "generated_at": "2026-01-19T20:43:06+00:00",
-    "schema_hash": "cae8b710a852bb7a4dd0450abdfa056c097c96239587e1f6a21695562b431827",
+    "generated_at": "2026-01-19T20:43:27+00:00",
+    "schema_hash": "dc988372383cd0aa79e2e4420935b6c3e4a793795afda51692c7368aaf551515",
     "tables": {
         "user_mails": {
             "class": "Domains\\Users\\Database\\Tables\\UserMailsTable",
@@ -54,7 +54,14 @@
                         "default": null
                     }
                 ],
-                "foreign_keys": [],
+                "foreign_keys": [
+                    {
+                        "column": "user_id",
+                        "references": "id",
+                        "on": "users",
+                        "onDelete": "cascade"
+                    }
+                ],
                 "was": []
             }
         },

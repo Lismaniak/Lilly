@@ -240,7 +240,7 @@ final class Blueprint
             throw new RuntimeException("foreignKey(): invalid definition on table '{$this->table}'");
         }
 
-        if (!$this->hasColumn($column)) {
+        if ($this->mode === 'create' && !$this->hasColumn($column)) {
             throw new RuntimeException(
                 "foreignKey(): column '{$column}' must be defined before adding a foreign key on table '{$this->table}'"
             );
