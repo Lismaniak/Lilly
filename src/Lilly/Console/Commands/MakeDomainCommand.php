@@ -174,12 +174,12 @@ final class MakeDomainCommand extends Command
 
     private function queryRepoStub(string $domain): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Schema\\{$domain}Schema;\nuse Lilly\\Database\\Repositories\\AbstractRepository;\n\nfinal class {$domain}QueryRepository extends AbstractRepository\n{\n    protected function table(): string\n    {\n        return {$domain}Schema::table();\n    }\n\n    protected function primaryKey(): string\n    {\n        return {$domain}Schema::primaryKey();\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Entities\\{$domain};\nuse Lilly\\Database\\Orm\\Orm;\nuse Lilly\\Database\\Orm\\Repository\\QueryRepository;\n\nfinal class {$domain}QueryRepository extends QueryRepository\n{\n    public function __construct(Orm \$orm)\n    {\n        parent::__construct(\$orm, {$domain}::class);\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
     }
 
     private function commandRepoStub(string $domain): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Schema\\{$domain}Schema;\nuse Lilly\\Database\\Repositories\\AbstractRepository;\n\nfinal class {$domain}CommandRepository extends AbstractRepository\n{\n    protected function table(): string\n    {\n        return {$domain}Schema::table();\n    }\n\n    protected function primaryKey(): string\n    {\n        return {$domain}Schema::primaryKey();\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Repositories;\n\nuse Domains\\{$domain}\\Entities\\{$domain};\nuse Lilly\\Database\\Orm\\Orm;\nuse Lilly\\Database\\Orm\\Repository\\CommandRepository;\n\nfinal class {$domain}CommandRepository extends CommandRepository\n{\n    public function __construct(Orm \$orm)\n    {\n        parent::__construct(\$orm, {$domain}::class);\n    }\n\n    // <methods>\n\n    // </methods>\n}\n";
     }
 
     private function domainSchemaStub(string $domain): string

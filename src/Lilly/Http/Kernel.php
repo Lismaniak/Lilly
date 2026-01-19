@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Lilly\Http;
 
 use Lilly\Config\Config;
+use Lilly\Database\Orm\OrmFactory;
 use Lilly\Security\SecurityFactory;
 use RuntimeException;
 
@@ -45,6 +46,13 @@ final class Kernel
             if (!$gateDecision->allowed) {
                 return Response::text("403 Forbidden\n{$gateDecision->message}\n", $gateDecision->status);
             }
+
+            $orm = (new OrmFactory(
+                projectRoot: $this->projectRoot,
+                config: $this->config,
+            ))->create();
+
+            $request = $request->withAttribute('orm', $orm);
 
             $handler = $route->handler;
             $result = $handler($request);
