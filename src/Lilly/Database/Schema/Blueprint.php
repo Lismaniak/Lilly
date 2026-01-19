@@ -32,6 +32,13 @@ final class Blueprint
      */
     private array $foreignKeys = [];
 
+    /**
+     * Column rename hints: newName => list<oldName>
+     *
+     * @var array<string, list<string>>
+     */
+    private array $was = [];
+
     public function __construct(
         private readonly string $table,
         private readonly string $mode = 'create' // create|alter
@@ -81,58 +88,74 @@ final class Blueprint
 
     public function id(string $name = 'id'): Column
     {
-        $col = new Column($name, 'id', nullable: false, unique: false, primary: true, autoIncrement: true);
-        $this->columns[] = $col;
-        return $col;
+        $col = new Column(
+            $name,
+            'id',
+            nullable: false,
+            unique: false,
+            primary: true,
+            autoIncrement: true
+        );
+
+        return $this->addColumn($col);
     }
 
     public function foreignId(string $name): Column
     {
-        $c = new Column($name, 'id', nullable: false, unique: false, primary: false, autoIncrement: false);
-        $this->columns[] = $c;
-        return $c;
+        $col = new Column(
+            $name,
+            'id',
+            nullable: false,
+            unique: false,
+            primary: false,
+            autoIncrement: false
+        );
+
+        return $this->addColumn($col);
     }
 
     public function unsignedBigInteger(string $name): Column
     {
-        $c = new Column($name, 'ubigint', nullable: false, unique: false, primary: false, autoIncrement: false);
-        $this->columns[] = $c;
-        return $c;
+        $col = new Column(
+            $name,
+            'ubigint',
+            nullable: false,
+            unique: false,
+            primary: false,
+            autoIncrement: false
+        );
+
+        return $this->addColumn($col);
     }
 
     public function string(string $name, int $length = 255): Column
     {
         $col = new Column($name, "string:{$length}");
-        $this->columns[] = $col;
-        return $col;
+        return $this->addColumn($col);
     }
 
     public function text(string $name): Column
     {
         $col = new Column($name, 'text');
-        $this->columns[] = $col;
-        return $col;
+        return $this->addColumn($col);
     }
 
     public function int(string $name): Column
     {
         $col = new Column($name, 'int');
-        $this->columns[] = $col;
-        return $col;
+        return $this->addColumn($col);
     }
 
     public function boolean(string $name): Column
     {
         $col = new Column($name, 'bool');
-        $this->columns[] = $col;
-        return $col;
+        return $this->addColumn($col);
     }
 
     public function timestamp(string $name): Column
     {
         $col = new Column($name, 'timestamp');
-        $this->columns[] = $col;
-        return $col;
+        return $this->addColumn($col);
     }
 
     public function timestamps(): void
@@ -190,10 +213,59 @@ final class Blueprint
         return $this->foreignKeys;
     }
 
+    /**
+     * @return array<string, list<string>> newName => legacy names
+     */
+    public function was(): array
+    {
+        return $this->was;
+    }
+
+    /**
+     * @param list<string> $from
+     */
+    public function registerWas(string $to, array $from): void
+    {
+        $to = trim($to);
+        if ($to === '') {
+            throw new RuntimeException('was(): target column may not be empty');
+        }
+
+        $clean = [];
+        foreach ($from as $name) {
+            if (!is_string($name)) {
+                throw new RuntimeException("was(): invalid legacy column for '{$to}'");
+            }
+
+            $name = trim($name);
+            if ($name === '' || $name === $to) {
+                continue;
+            }
+
+            $clean[] = $name;
+        }
+
+        $clean = array_values(array_unique($clean));
+        if ($clean === []) {
+            return;
+        }
+
+        $existing = $this->was[$to] ?? [];
+        $merged = array_values(array_unique(array_merge($existing, $clean)));
+        $this->was[$to] = $merged;
+    }
+
     public function ensureHasColumnsForCreate(): void
     {
         if ($this->columns === []) {
             throw new RuntimeException("Table '{$this->table}' has no columns");
         }
+    }
+
+    private function addColumn(Column $col): Column
+    {
+        $col->bindBlueprint($this);
+        $this->columns[] = $col;
+        return $col;
     }
 }

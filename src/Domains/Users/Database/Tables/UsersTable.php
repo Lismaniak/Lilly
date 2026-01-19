@@ -15,6 +15,7 @@ final class UsersTable
     public static function define(Blueprint $t): void
     {
         $t->id();
+        $t->string('name');
         $t->timestamps();
     }
 }
