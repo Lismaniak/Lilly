@@ -40,6 +40,18 @@ final class SchemaSyncWriter
         return $file;
     }
 
+    public function writeDropMigration(string $pendingDir, string $domain, string $tableName): string
+    {
+        $stamp = gmdate('Y_m_d_His');
+        $descriptor = $this->buildDropDescriptor($tableName);
+        $file = "{$stamp}_{$descriptor}.php";
+        $path = "{$pendingDir}/{$file}";
+
+        file_put_contents($path, $this->dropTableMigrationStub($domain, $tableName));
+
+        return $file;
+    }
+
     private function createTableMigrationStub(string $domain, string $tableName, array $def): string
     {
         $ns = "Domains\\{$domain}\\Database\\Migrations";
@@ -155,6 +167,29 @@ final class SchemaSyncWriter
         $this->emitForeignKeyAddLines($lines, $fkAdds);
 
         $lines[] = "    });";
+        $lines[] = "};";
+        $lines[] = "";
+
+        return implode("\n", $lines);
+    }
+
+    private function dropTableMigrationStub(string $domain, string $tableName): string
+    {
+        $ns = "Domains\\{$domain}\\Database\\Migrations";
+
+        $lines = [];
+        $lines[] = "<?php";
+        $lines[] = "declare(strict_types=1);";
+        $lines[] = "";
+        $lines[] = "namespace {$ns};";
+        $lines[] = "";
+        $lines[] = "use PDO;";
+        $lines[] = "use Lilly\\Database\\Schema\\Schema;";
+        $lines[] = "";
+        $lines[] = "return function (PDO \$pdo): void {";
+        $lines[] = "    \$schema = new Schema(\$pdo);";
+        $lines[] = "";
+        $lines[] = "    \$schema->dropIfExists('" . $this->escapeSingleQuoted($tableName) . "');";
         $lines[] = "};";
         $lines[] = "";
 
@@ -424,6 +459,13 @@ final class SchemaSyncWriter
             }
             $this->appendNameParts($parts, $names, 'with');
         }
+
+        return $this->buildDescriptor($parts);
+    }
+
+    private function buildDropDescriptor(string $tableName): string
+    {
+        $parts = ['drop', $tableName, 'table'];
 
         return $this->buildDescriptor($parts);
     }

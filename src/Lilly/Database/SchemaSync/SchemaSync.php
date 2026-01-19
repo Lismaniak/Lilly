@@ -78,6 +78,8 @@ final class SchemaSync
             ];
 
             $createdFiles = 0;
+            $desiredTables = array_fill_keys(array_keys($desired['tables'] ?? []), true);
+            $approvedTables = array_keys($approved['tables'] ?? []);
 
             foreach ($tables as $t) {
                 $tableName = $t['table'];
@@ -135,6 +137,21 @@ final class SchemaSync
                     'file' => $file,
                     'class' => $tableClass,
                     'changes' => $ops,
+                ];
+                $createdFiles++;
+            }
+
+            foreach ($approvedTables as $tableName) {
+                if (isset($desiredTables[$tableName])) {
+                    continue;
+                }
+
+                $file = $this->writer->writeDropMigration($pendingDir, $d, $tableName);
+
+                $plan['ops'][] = [
+                    'op' => 'drop_table',
+                    'table' => $tableName,
+                    'file' => $file,
                 ];
                 $createdFiles++;
             }
