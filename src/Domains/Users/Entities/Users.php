@@ -3,18 +3,12 @@ declare(strict_types=1);
 
 namespace Domains\Users\Entities;
 
-use Lilly\Database\Orm\Attributes\Column;
 use Lilly\Database\Orm\Attributes\Table;
+use Lilly\Database\Orm\Attributes\Column;
 
 #[Table('users')]
-final class User
+final class Users
 {
     #[Column('id', primary: true, autoIncrement: true)]
     public ?int $id = null;
-
-    #[Column('email')]
-    public string $email = '';
-
-    #[Column('name')]
-    public string $name = '';
 }

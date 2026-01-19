@@ -17,6 +17,7 @@ use Lilly\Console\Commands\MakeAppPolicyCommand;
 use Lilly\Console\Commands\MakeForeignKeysCommand;
 use Lilly\Console\Commands\MakeGateCommand;
 use Lilly\Console\Commands\MakeRepoHelpersCommand;
+use Lilly\Console\Commands\MakeTableBlueprintCommand;
 use Lilly\Console\Commands\RemoveAppComponentCommand;
 use Lilly\Console\Commands\RemoveAppGateCommand;
 use Lilly\Console\Commands\RemoveAppPolicyCommand;
@@ -53,7 +54,7 @@ final class ApplicationFactory
         $app->addCommand(new DomainDbSyncCommand(projectRoot: $projectRoot));
         $app->addCommand(new MakeForeignKeysCommand($projectRoot));
         $app->addCommand(new MakeRepoHelpersCommand($projectRoot));
-
+        $app->addCommand(new MakeTableBlueprintCommand($projectRoot));
 
         return $app;
     }
