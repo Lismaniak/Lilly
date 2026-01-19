@@ -459,8 +459,23 @@ final class SchemaSyncWriter
         if ($type === 'timestamp') {
             return "\$t->timestamp('{$name}')";
         }
+        if ($type === 'datetime') {
+            return "\$t->datetime('{$name}')";
+        }
+        if ($type === 'date') {
+            return "\$t->date('{$name}')";
+        }
         if ($type === 'ubigint') {
             return "\$t->unsignedBigInteger('{$name}')";
+        }
+        if ($type === 'bigint') {
+            return "\$t->bigInteger('{$name}')";
+        }
+        if ($type === 'uuid') {
+            return "\$t->uuid('{$name}')";
+        }
+        if ($type === 'json') {
+            return "\$t->json('{$name}')";
         }
         if (str_starts_with($type, 'string:')) {
             $len = (int) substr($type, strlen('string:'));

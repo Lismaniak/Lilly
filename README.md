@@ -187,6 +187,112 @@ Domains/Users/Migrations/
 
 ---
 
+## Schema sync (table blueprints)
+
+Lilly can generate migrations from domain table blueprints and keep an approved manifest in sync.
+
+### Blueprint location and structure
+
+```
+Domains/<Domain>/Database/Tables/*Table.php
+```
+
+Each table class must implement:
+
+* `public static function name(): string`
+* `public static function define(Blueprint $t): void`
+* Optional: `public static function foreignKeys(): array`
+
+### Example table blueprint
+
+```php
+<?php
+declare(strict_types=1);
+
+namespace Domains\Users\Database\Tables;
+
+use Lilly\Database\Schema\Blueprint;
+
+final class UsersTable
+{
+    public static function name(): string
+    {
+        return 'users';
+    }
+
+    public static function define(Blueprint $t): void
+    {
+        $t->id();
+        $t->unsignedBigInteger('team_id')->nullable();
+        $t->uuid('uuid')->unique();
+        $t->string('email')->unique();
+        $t->string('full_name')->was('name');
+        $t->timestamps();
+    }
+
+    public static function foreignKeys(): array
+    {
+        return [
+            [
+                'column' => 'team_id',
+                'references' => 'id',
+                'on' => 'teams',
+                'onDelete' => 'cascade',
+            ],
+        ];
+    }
+}
+```
+
+### Supported column types
+
+* `id()`
+* `string($name, $length = 255)`
+* `text()`
+* `int()`
+* `boolean()`
+* `timestamp()`
+* `datetime()`
+* `date()`
+* `unsignedBigInteger()`
+* `bigInteger()`
+* `uuid()`
+* `json()`
+
+### Rename safety (`was()`)
+
+Use `->was()` on a column to mark legacy names so sync will emit a safe rename instead of drop+add.
+
+```
+$t->string('display_name')->was(['name', 'full_name']);
+```
+
+### Sync lifecycle
+
+1. Define or update table blueprints in `Database/Tables`.
+2. Run `db:sync` to generate a pending plan in `Database/Migrations/.pending/<hash>`.
+3. Review the generated migrations and plan.
+4. Run `db:sync:apply <Domain> [hash]` to:
+
+   * Sandbox-run the plan
+   * Apply migrations to the real DB
+   * Promote files into `Database/Migrations/`
+   * Write `schema.manifest.json` as the approved baseline
+
+5. If needed, discard a plan with `db:sync:discard <Domain> <hash>`.
+
+### Destructive drops
+
+`db:sync` will refuse to generate migrations that drop tables or columns unless you pass:
+
+```
+db:sync <Domain> --allow-drop
+```
+
+This is an explicit safety check.
+
+---
+
 ## Policies and gates (domain middleware)
 
 ```
@@ -527,6 +633,11 @@ shape:cross:remove <Name>
 
 shape:gate:make <Domain> <GateClass>
 shape:gate:remove <Domain> <GateClass>
+
+db:sync [Domain] [--allow-drop]
+db:sync:lint [Domain]
+db:sync:apply <Domain> [hash]
+db:sync:discard <Domain> <hash>
 ```
 
 Scaffolding is the only supported way to create structure.

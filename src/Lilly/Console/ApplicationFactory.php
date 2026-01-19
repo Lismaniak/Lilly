@@ -9,6 +9,7 @@ use Lilly\Console\Commands\DbFlushCommand;
 use Lilly\Console\Commands\DbSyncApplyCommand;
 use Lilly\Console\Commands\DbSyncCommand;
 use Lilly\Console\Commands\DbSyncDiscardCommand;
+use Lilly\Console\Commands\DbSyncLintCommand;
 use Lilly\Console\Commands\MakeAppComponentCommand;
 use Lilly\Console\Commands\MakeAppGateCommand;
 use Lilly\Console\Commands\MakeAppPolicyCommand;
@@ -49,6 +50,7 @@ final class ApplicationFactory
         $app->addCommand(new DbSyncCommand($projectRoot));
         $app->addCommand(new DbSyncApplyCommand(projectRoot: $projectRoot, config: $config));
         $app->addCommand(new DbSyncDiscardCommand($projectRoot));
+        $app->addCommand(new DbSyncLintCommand($projectRoot));
 
         return $app;
     }
