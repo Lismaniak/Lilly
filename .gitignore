@@ -23,8 +23,8 @@
 coverage/
 
 # Lilly
-src/Domains/
-src/App/
+#src/Domains/
+#src/App/
 
 # Runtime storage
 /var/*
