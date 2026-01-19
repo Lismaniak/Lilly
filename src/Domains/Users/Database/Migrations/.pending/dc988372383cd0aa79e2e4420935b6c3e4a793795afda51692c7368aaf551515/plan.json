@@ -1,0 +1,27 @@
+{
+    "domain": "Users",
+    "schema_hash": "dc988372383cd0aa79e2e4420935b6c3e4a793795afda51692c7368aaf551515",
+    "generated_at": "2026-01-19T20:43:27+00:00",
+    "ops": [
+        {
+            "op": "update_table",
+            "table": "user_mails",
+            "file": "2026_01_19_204327_update_user_mails.php",
+            "class": "Domains\\Users\\Database\\Tables\\UserMailsTable",
+            "changes": {
+                "drops": [],
+                "renames": [],
+                "adds": [],
+                "foreign_keys_adds": [
+                    {
+                        "column": "user_id",
+                        "references": "id",
+                        "on": "users",
+                        "onDelete": "cascade"
+                    }
+                ],
+                "foreign_keys_drops": []
+            }
+        }
+    ]
+}

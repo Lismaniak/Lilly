@@ -10,8 +10,8 @@ use Lilly\Database\Schema\Schema;
 return function (PDO $pdo): void {
     $schema = new Schema($pdo);
 
-    $schema->table('users', function (Blueprint $t): void {
-        // DROP inferred: removed from define()
-        $t->drop('test3');
+    $schema->table('user_mails', function (Blueprint $t): void {
+        // DROP FK inferred: removed from foreignKeys()
+        $t->dropForeignKey('user_mails_user_id_fk');
     });
 };

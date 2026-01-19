@@ -14,7 +14,6 @@ return function (PDO $pdo): void {
         $t->timestamp('created_at');
         $t->id('id');
         $t->string('name', 255);
-        $t->string('test3', 255);
         $t->timestamp('updated_at')->nullable();
     });
 };
