@@ -10,7 +10,8 @@ final class SchemaSyncWriter
     public function writeCreateMigration(string $pendingDir, string $domain, string $tableName, array $def): string
     {
         $stamp = gmdate('Y_m_d_His');
-        $file = "{$stamp}_create_{$tableName}.php";
+        $descriptor = $this->buildCreateDescriptor($tableName, $def);
+        $file = "{$stamp}_{$descriptor}.php";
         $path = "{$pendingDir}/{$file}";
 
         file_put_contents($path, $this->createTableMigrationStub($domain, $tableName, $def));
@@ -30,7 +31,8 @@ final class SchemaSyncWriter
     public function writeUpdateMigration(string $pendingDir, string $domain, string $tableName, array $ops): string
     {
         $stamp = gmdate('Y_m_d_His');
-        $file = "{$stamp}_update_{$tableName}.php";
+        $descriptor = $this->buildUpdateDescriptor($tableName, $ops);
+        $file = "{$stamp}_{$descriptor}.php";
         $path = "{$pendingDir}/{$file}";
 
         file_put_contents($path, $this->updateTableMigrationStub($domain, $tableName, $ops));
@@ -405,5 +407,147 @@ final class SchemaSyncWriter
     private function foreignKeyName(string $table, string $col): string
     {
         return "{$table}_{$col}_fk";
+    }
+
+    private function buildCreateDescriptor(string $tableName, array $def): string
+    {
+        $parts = ['create', $tableName, 'table'];
+
+        $columns = $def['columns'] ?? [];
+        if (is_array($columns)) {
+            $names = [];
+            foreach ($columns as $column) {
+                if (!is_array($column) || !isset($column['name'])) {
+                    continue;
+                }
+                $names[] = (string) $column['name'];
+            }
+            $this->appendNameParts($parts, $names, 'with');
+        }
+
+        return $this->buildDescriptor($parts);
+    }
+
+    /**
+     * @param array{
+     *   drops:list<string>,
+     *   renames:list<array{from:string,to:string}>,
+     *   adds:list<array<string,mixed>>,
+     *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>,
+     *   foreign_keys_drops?:list<string>
+     * } $ops
+     */
+    private function buildUpdateDescriptor(string $tableName, array $ops): string
+    {
+        $parts = ['update', $tableName];
+
+        $addNames = [];
+        foreach (($ops['adds'] ?? []) as $add) {
+            if (!is_array($add) || !isset($add['name'])) {
+                continue;
+            }
+            $addNames[] = (string) $add['name'];
+        }
+        $this->appendNameParts($parts, $addNames, 'add');
+
+        $dropNames = [];
+        foreach (($ops['drops'] ?? []) as $drop) {
+            $dropNames[] = (string) $drop;
+        }
+        $this->appendNameParts($parts, $dropNames, 'drop');
+
+        $renameParts = [];
+        foreach (($ops['renames'] ?? []) as $rename) {
+            if (!is_array($rename)) {
+                continue;
+            }
+            $from = (string) ($rename['from'] ?? '');
+            $to = (string) ($rename['to'] ?? '');
+            if ($from === '' || $to === '') {
+                continue;
+            }
+            $renameParts[] = "{$from}_to_{$to}";
+        }
+        $this->appendNameParts($parts, $renameParts, 'rename', 2);
+
+        $fkAddNames = [];
+        foreach (($ops['foreign_keys_adds'] ?? []) as $fkAdd) {
+            if (!is_array($fkAdd) || !isset($fkAdd['column'])) {
+                continue;
+            }
+            $fkAddNames[] = (string) $fkAdd['column'];
+        }
+        $this->appendNameParts($parts, $fkAddNames, 'add_fk');
+
+        $fkDropNames = [];
+        foreach (($ops['foreign_keys_drops'] ?? []) as $fkDrop) {
+            $fkDropNames[] = (string) $fkDrop;
+        }
+        $this->appendNameParts($parts, $fkDropNames, 'drop_fk');
+
+        return $this->buildDescriptor($parts);
+    }
+
+    /**
+     * @param list<string> $names
+     */
+    private function appendNameParts(array &$parts, array $names, string $label, int $max = 3): void
+    {
+        $clean = [];
+        foreach ($names as $name) {
+            $value = $this->sanitizeDescriptorPart((string) $name);
+            if ($value === '') {
+                continue;
+            }
+            $clean[] = $value;
+        }
+
+        if ($clean === []) {
+            return;
+        }
+
+        $parts[] = $label;
+        foreach (array_slice($clean, 0, $max) as $name) {
+            $parts[] = $name;
+        }
+
+        $extra = count($clean) - $max;
+        if ($extra > 0) {
+            $parts[] = "and_{$extra}_more";
+        }
+    }
+
+    /**
+     * @param list<string> $parts
+     */
+    private function buildDescriptor(array $parts): string
+    {
+        $cleanParts = [];
+        foreach ($parts as $part) {
+            $value = $this->sanitizeDescriptorPart((string) $part);
+            if ($value === '') {
+                continue;
+            }
+            $cleanParts[] = $value;
+        }
+
+        $descriptor = trim(implode('_', $cleanParts), '_');
+        if ($descriptor === '') {
+            $descriptor = 'migration';
+        }
+
+        if (strlen($descriptor) > 160) {
+            $descriptor = substr($descriptor, 0, 160);
+            $descriptor = rtrim($descriptor, '_');
+        }
+
+        return $descriptor;
+    }
+
+    private function sanitizeDescriptorPart(string $value): string
+    {
+        $value = strtolower($value);
+        $value = preg_replace('/[^a-z0-9]+/', '_', $value) ?? '';
+        return trim($value, '_');
     }
 }
