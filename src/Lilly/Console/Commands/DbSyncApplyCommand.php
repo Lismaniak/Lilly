@@ -35,6 +35,7 @@ final class DbSyncApplyCommand extends Command
         $domain = $this->normalizeDomainName((string) $input->getArgument('domain'));
         $hashArg = $input->getArgument('hash');
         $hash = is_string($hashArg) ? trim($hashArg) : '';
+        $verbose = $output->isVerbose();
 
         if ($domain === '') {
             $output->writeln('<error>Usage: db:sync:apply <Domain> [hash]</error>');
@@ -80,9 +81,11 @@ final class DbSyncApplyCommand extends Command
                 return Command::FAILURE;
             }
 
-            $output->writeln("<info>Plan:</info> {$domain} {$planHash}");
-            foreach ($pendingFiles as $path) {
-                $output->writeln(' - ' . basename($path));
+            $output->writeln("<info>Plan:</info> {$domain} {$planHash} (" . count($pendingFiles) . ' migrations)');
+            if ($verbose) {
+                foreach ($pendingFiles as $path) {
+                    $output->writeln(' - ' . basename($path));
+                }
             }
 
             try {
@@ -112,16 +115,24 @@ final class DbSyncApplyCommand extends Command
             }
 
             if ($appliedBaseline !== []) {
-                $output->writeln('<info>Real DB baseline applied:</info>');
-                foreach ($appliedBaseline as $name) {
-                    $output->writeln(' - ' . $name);
+                if ($verbose) {
+                    $output->writeln('<info>Real DB baseline applied:</info>');
+                    foreach ($appliedBaseline as $name) {
+                        $output->writeln(' - ' . $name);
+                    }
+                } else {
+                    $output->writeln('<info>Real DB baseline applied:</info> ' . count($appliedBaseline) . ' migration(s)');
                 }
             }
 
             if ($appliedPending !== []) {
-                $output->writeln('<info>Applied to real DB:</info>');
-                foreach ($appliedPending as $name) {
-                    $output->writeln(' - ' . $name);
+                if ($verbose) {
+                    $output->writeln('<info>Applied to real DB:</info>');
+                    foreach ($appliedPending as $name) {
+                        $output->writeln(' - ' . $name);
+                    }
+                } else {
+                    $output->writeln('<info>Applied to real DB:</info> ' . count($appliedPending) . ' migration(s)');
                 }
             } else {
                 $output->writeln('<comment>Real DB: nothing new applied (already recorded).</comment>');
@@ -131,6 +142,9 @@ final class DbSyncApplyCommand extends Command
             $result = $sync->accept(domain: $domain, hash: $planHash);
 
             foreach ($result->lines as $line) {
+                if (!$verbose && str_starts_with($line, ' + ')) {
+                    continue;
+                }
                 $output->writeln($line);
             }
 
