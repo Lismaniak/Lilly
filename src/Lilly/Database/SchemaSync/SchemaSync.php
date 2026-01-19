@@ -81,9 +81,64 @@ final class SchemaSync
             $desiredTables = array_fill_keys(array_keys($desired['tables'] ?? []), true);
             $approvedTables = array_keys($approved['tables'] ?? []);
 
+            $tablesByName = [];
+            $createTables = [];
+            $updateTables = [];
+
             foreach ($tables as $t) {
                 $tableName = $t['table'];
-                $tableClass = $t['class'];
+                $tablesByName[$tableName] = $t;
+
+                if (!isset($approved['tables'][$tableName])) {
+                    $createTables[] = $tableName;
+                } else {
+                    $updateTables[] = $tableName;
+                }
+            }
+
+            $createOrder = $this->orderCreateTables(
+                $createTables,
+                $desired['tables'] ?? []
+            );
+
+            $stampBase = time();
+            $stampOffset = 0;
+
+            foreach ($createOrder as $tableName) {
+                $table = $tablesByName[$tableName] ?? null;
+                if ($table === null) {
+                    continue;
+                }
+
+                $tableClass = $table['class'];
+                $desiredEntry = $desired['tables'][$tableName] ?? null;
+
+                if (!is_array($desiredEntry) || !isset($desiredEntry['def']) || !is_array($desiredEntry['def'])) {
+                    throw new RuntimeException("Desired manifest missing def for table '{$tableName}'");
+                }
+
+                $desiredDef = $desiredEntry['def'];
+                $stamp = gmdate('Y_m_d_His', $stampBase + $stampOffset);
+                $stampOffset++;
+
+                $file = $this->writer->writeCreateMigration($pendingDir, $d, $tableName, $desiredDef, $stamp);
+
+                $plan['ops'][] = [
+                    'op' => 'create_table',
+                    'table' => $tableName,
+                    'file' => $file,
+                    'class' => $tableClass,
+                ];
+                $createdFiles++;
+            }
+
+            foreach ($updateTables as $tableName) {
+                $table = $tablesByName[$tableName] ?? null;
+                if ($table === null) {
+                    continue;
+                }
+
+                $tableClass = $table['class'];
 
                 $approvedEntry = $approved['tables'][$tableName] ?? null;
                 $desiredEntry = $desired['tables'][$tableName] ?? null;
@@ -93,19 +148,6 @@ final class SchemaSync
                 }
 
                 $desiredDef = $desiredEntry['def'];
-
-                if ($approvedEntry === null) {
-                    $file = $this->writer->writeCreateMigration($pendingDir, $d, $tableName, $desiredDef);
-
-                    $plan['ops'][] = [
-                        'op' => 'create_table',
-                        'table' => $tableName,
-                        'file' => $file,
-                        'class' => $tableClass,
-                    ];
-                    $createdFiles++;
-                    continue;
-                }
 
                 $approvedDef = $approvedEntry['def'] ?? null;
                 if (!is_array($approvedDef)) {
@@ -246,5 +288,89 @@ final class SchemaSync
             "<info>Discarded plan:</info> {$domain} {$hash}",
             " - deleted " . $this->fs->rel($pendingDir),
         ]);
+    }
+
+    /**
+     * @param list<string> $createTables
+     * @param array<string, array<string, mixed>> $desiredTables
+     * @return list<string>
+     */
+    private function orderCreateTables(array $createTables, array $desiredTables): array
+    {
+        $createTables = array_values(array_unique($createTables));
+        if ($createTables === []) {
+            return [];
+        }
+
+        $createSet = array_fill_keys($createTables, true);
+        $edges = [];
+        $inDegree = [];
+
+        foreach ($createTables as $table) {
+            $edges[$table] = [];
+            $inDegree[$table] = 0;
+        }
+
+        foreach ($createTables as $table) {
+            $entry = $desiredTables[$table] ?? null;
+            $def = is_array($entry) ? ($entry['def'] ?? null) : null;
+            if (!is_array($def)) {
+                continue;
+            }
+
+            $fks = $def['foreign_keys'] ?? [];
+            if (!is_array($fks)) {
+                continue;
+            }
+
+            foreach ($fks as $fk) {
+                if (!is_array($fk)) {
+                    continue;
+                }
+                $on = trim((string) ($fk['on'] ?? ''));
+                if ($on === '' || $on === $table) {
+                    continue;
+                }
+                if (!isset($createSet[$on])) {
+                    continue;
+                }
+
+                $edges[$on][] = $table;
+                $inDegree[$table]++;
+            }
+        }
+
+        $queue = [];
+        foreach ($inDegree as $table => $degree) {
+            if ($degree === 0) {
+                $queue[] = $table;
+            }
+        }
+        sort($queue);
+
+        $ordered = [];
+        while ($queue !== []) {
+            $current = array_shift($queue);
+            $ordered[] = $current;
+
+            foreach ($edges[$current] as $dependent) {
+                $inDegree[$dependent]--;
+                if ($inDegree[$dependent] === 0) {
+                    $queue[] = $dependent;
+                }
+            }
+
+            if ($queue !== []) {
+                sort($queue);
+            }
+        }
+
+        if (count($ordered) !== count($createTables)) {
+            $remaining = array_values(array_diff($createTables, $ordered));
+            sort($remaining);
+            $ordered = array_merge($ordered, $remaining);
+        }
+
+        return $ordered;
     }
 }

@@ -7,9 +7,15 @@ use RuntimeException;
 
 final class SchemaSyncWriter
 {
-    public function writeCreateMigration(string $pendingDir, string $domain, string $tableName, array $def): string
+    public function writeCreateMigration(
+        string $pendingDir,
+        string $domain,
+        string $tableName,
+        array $def,
+        ?string $stamp = null
+    ): string
     {
-        $stamp = gmdate('Y_m_d_His');
+        $stamp = $stamp ?? gmdate('Y_m_d_His');
         $descriptor = $this->buildCreateDescriptor($tableName, $def);
         $file = "{$stamp}_{$descriptor}.php";
         $path = "{$pendingDir}/{$file}";
