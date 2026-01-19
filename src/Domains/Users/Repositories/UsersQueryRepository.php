@@ -3,22 +3,20 @@ declare(strict_types=1);
 
 namespace Domains\Users\Repositories;
 
-use Domains\Users\Schema\UsersSchema;
-use Lilly\Database\Repositories\AbstractRepository;
+use Domains\Users\Entities\User;
+use Lilly\Database\Orm\Orm;
+use Lilly\Database\Orm\Repository\QueryRepository;
 
-final class UsersQueryRepository extends AbstractRepository
+final class UsersQueryRepository extends QueryRepository
 {
-    protected function table(): string
+    public function __construct(Orm $orm)
     {
-        return UsersSchema::table();
+        parent::__construct($orm, User::class);
     }
 
-    protected function primaryKey(): string
+    public function byEmail(string $email): ?User
     {
-        return UsersSchema::primaryKey();
+        $u = $this->findOneBy(['email' => $email]);
+        return $u instanceof User ? $u : null;
     }
-
-    // <methods>
-
-    // </methods>
 }

@@ -3,22 +3,24 @@ declare(strict_types=1);
 
 namespace Domains\Users\Repositories;
 
-use Domains\Users\Schema\UsersSchema;
-use Lilly\Database\Repositories\AbstractRepository;
+use Domains\Users\Entities\User;
+use Lilly\Database\Orm\Orm;
+use Lilly\Database\Orm\Repository\CommandRepository;
 
-final class UsersCommandRepository extends AbstractRepository
+final class UsersCommandRepository extends CommandRepository
 {
-    protected function table(): string
+    public function __construct(Orm $orm)
     {
-        return UsersSchema::table();
+        parent::__construct($orm, User::class);
     }
 
-    protected function primaryKey(): string
+    public function saveUser(User $user): void
     {
-        return UsersSchema::primaryKey();
+        $this->save($user);
     }
 
-    // <methods>
-
-    // </methods>
+    public function deleteUser(User $user): void
+    {
+        $this->delete($user);
+    }
 }

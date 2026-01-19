@@ -3,31 +3,18 @@ declare(strict_types=1);
 
 namespace Domains\Users\Entities;
 
-use Domains\Users\Repositories\UsersCommandRepository;
-use Domains\Users\Repositories\UsersQueryRepository;
-use Domains\Users\Schema\UsersSchema;
-use Lilly\Orm\ActiveRecord;
+use Lilly\Database\Orm\Attributes\Column;
+use Lilly\Database\Orm\Attributes\Table;
 
-final class User extends ActiveRecord
+#[Table('users')]
+final class User
 {
-    public function __construct(
-        public readonly int $id
-    ) {}
+    #[Column('id', primary: true, autoIncrement: true)]
+    public ?int $id = null;
 
-    protected static function queryRepositoryFqcn(): string
-    {
-        return UsersQueryRepository::class;
-    }
+    #[Column('email')]
+    public string $email = '';
 
-    protected static function commandRepositoryFqcn(): string
-    {
-        return UsersCommandRepository::class;
-    }
-
-    public static function fromRow(array $row): static
-    {
-        return new self(
-            id: (int) $row[UsersSchema::primaryKey()]
-        );
-    }
+    #[Column('name')]
+    public string $name = '';
 }
