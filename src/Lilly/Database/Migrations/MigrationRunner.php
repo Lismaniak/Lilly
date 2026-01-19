@@ -5,6 +5,7 @@ namespace Lilly\Database\Migrations;
 
 use PDO;
 use RuntimeException;
+use Throwable;
 
 final class MigrationRunner
 {
@@ -20,6 +21,10 @@ final class MigrationRunner
         $this->ensureMigrationsTable($pdo);
 
         $all = $this->discoverMigrationFiles();
+        if ($all === []) {
+            return [];
+        }
+
         $applied = $this->appliedMigrationNames($pdo);
 
         $pending = [];
@@ -38,10 +43,7 @@ final class MigrationRunner
         $batch = $this->nextBatchNumber($pdo);
 
         foreach ($pending as $name => $path) {
-            print "[migrate] {$name}\n";
-            if (function_exists('flush')) {
-                flush();
-            }
+            $this->printProgress($name);
 
             $callable = require $path;
 
@@ -51,7 +53,7 @@ final class MigrationRunner
 
             try {
                 $callable($pdo);
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 throw new RuntimeException(
                     "Migration failed: {$name}\n{$path}\n" . $e->getMessage(),
                     (int) $e->getCode(),
@@ -85,17 +87,26 @@ final class MigrationRunner
                     'batch' => (int) $applied[$name]['batch'],
                     'applied_at' => (string) $applied[$name]['applied_at'],
                 ];
-            } else {
-                $out[$name] = [
-                    'path' => $path,
-                    'status' => 'pending',
-                    'batch' => null,
-                    'applied_at' => null,
-                ];
+                continue;
             }
+
+            $out[$name] = [
+                'path' => $path,
+                'status' => 'pending',
+                'batch' => null,
+                'applied_at' => null,
+            ];
         }
 
         return $out;
+    }
+
+    private function printProgress(string $name): void
+    {
+        print "[migrate] {$name}\n";
+        if (function_exists('flush')) {
+            flush();
+        }
     }
 
     private function ensureMigrationsTable(PDO $pdo): void
@@ -105,10 +116,10 @@ final class MigrationRunner
         if ($driver === 'sqlite') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS lilly_migrations (
-                name TEXT PRIMARY KEY,
-                batch INTEGER NOT NULL,
-                applied_at TEXT NOT NULL
-            )"
+                    name TEXT PRIMARY KEY,
+                    batch INTEGER NOT NULL,
+                    applied_at TEXT NOT NULL
+                )"
             );
             return;
         }
@@ -116,11 +127,11 @@ final class MigrationRunner
         if ($driver === 'mysql') {
             $pdo->exec(
                 "CREATE TABLE IF NOT EXISTS lilly_migrations (
-                name VARCHAR(255) NOT NULL,
-                batch INT NOT NULL,
-                applied_at DATETIME NOT NULL,
-                PRIMARY KEY (name)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+                    name VARCHAR(255) NOT NULL,
+                    batch INT NOT NULL,
+                    applied_at DATETIME NOT NULL,
+                    PRIMARY KEY (name)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
             return;
         }
@@ -128,27 +139,27 @@ final class MigrationRunner
         throw new RuntimeException("Unsupported driver '{$driver}'");
     }
 
-
     /**
      * Discovers migrations for every domain.
      *
      * Convention:
      * - Domain table migrations live flat:
-     *   src/Domains/<Domain>/Migrations/*.php
+     *   src/Domains/<Domain>/Database/Migrations/*.php
      *
      * - Owned tables live scoped:
-     *   src/Domains/<Domain>/Migrations/owned/<table>/*.php
+     *   src/Domains/<Domain>/Database/Migrations/owned/<table>/*.php
      *
      * Migration name is stable and includes the relative path:
      * - <Domain>/<file>.php
      * - <Domain>/owned/<table>/<file>.php
+     *
+     * Note: ".pending" is ignored.
      *
      * @return array<string, string> [migrationName => absolutePath]
      */
     private function discoverMigrationFiles(): array
     {
         $domainsRoot = $this->projectRoot . '/src/Domains';
-
         if (!is_dir($domainsRoot)) {
             return [];
         }
@@ -173,12 +184,12 @@ final class MigrationRunner
                 continue;
             }
 
-            $migrationsRoot = $domainDir . '/Migrations';
+            $migrationsRoot = $domainDir . '/Database/Migrations';
             if (!is_dir($migrationsRoot)) {
                 continue;
             }
 
-            // 1) Flat domain migrations: Migrations/*.php (ignore directories)
+            // 1) Flat domain migrations: Database/Migrations/*.php (ignore directories)
             $flat = glob($migrationsRoot . '/*.php');
             if ($flat !== false) {
                 foreach ($flat as $path) {
@@ -192,7 +203,7 @@ final class MigrationRunner
                 }
             }
 
-            // 2) Owned migrations: Migrations/owned/<table>/*.php
+            // 2) Owned migrations: Database/Migrations/owned/<table>/*.php
             $ownedRoot = $migrationsRoot . '/owned';
             if (is_dir($ownedRoot)) {
                 $tables = scandir($ownedRoot);
@@ -205,6 +216,9 @@ final class MigrationRunner
                         continue;
                     }
                     if (str_starts_with($table, '.')) {
+                        continue;
+                    }
+                    if ($table === '.pending') {
                         continue;
                     }
 
@@ -243,7 +257,7 @@ final class MigrationRunner
      * Expected filename prefix:
      *   YYYY_MM_DD_HHMMSS_
      *
-     * If missing, timestamp is 0 and will run first (not ideal, but explicit).
+     * If missing, timestamp is 0 and will run first.
      *
      * @param array<string, string> $migrations [name => path]
      * @return array<string, string>
@@ -254,7 +268,6 @@ final class MigrationRunner
 
         foreach ($migrations as $name => $path) {
             $base = basename($path);
-
             $ts = $this->extractTimestampKey($base);
 
             $items[] = [
@@ -273,7 +286,6 @@ final class MigrationRunner
                 return 1;
             }
 
-            // tie-breakers for stability
             $c = strcmp((string) $a['base'], (string) $b['base']);
             if ($c !== 0) {
                 return $c;
@@ -302,7 +314,6 @@ final class MigrationRunner
 
         $key = $m[1] . $m[2] . $m[3] . $m[4];
 
-        // safe int conversion (fits in 64-bit)
         return (int) $key;
     }
 
@@ -340,6 +351,7 @@ final class MigrationRunner
             if (!isset($row['name']) || !is_string($row['name'])) {
                 continue;
             }
+
             $out[$row['name']] = [
                 'batch' => isset($row['batch']) ? (int) $row['batch'] : 0,
                 'applied_at' => isset($row['applied_at']) ? (string) $row['applied_at'] : '',
