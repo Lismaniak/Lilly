@@ -16,6 +16,7 @@ final class UserMailsTable
     {
         $t->id();
         $t->string('testmail');
+        $t->unsignedInteger('user_id');
         $t->timestamps();
     }
 
@@ -25,6 +26,14 @@ final class UserMailsTable
      */
     public static function foreignKeys(): array
     {
-        return [];
+        return [
+            [
+                'column' => 'user_id',
+                'references' => 'id',
+                'on' => 'users',
+                'onDelete' => 'cascade',
+            ],
+        ];
     }
+
 }

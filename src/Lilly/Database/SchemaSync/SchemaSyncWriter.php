@@ -18,7 +18,11 @@ final class SchemaSyncWriter
     }
 
     /**
-     * @param array{renames:list<array{from:string,to:string}>, adds:list<array<string,mixed>>} $ops
+     * @param array{
+     *   drops:list<string>,
+     *   renames:list<array{from:string,to:string}>,
+     *   adds:list<array<string,mixed>>
+     * } $ops
      */
     public function writeUpdateMigration(string $pendingDir, string $domain, string $tableName, array $ops): string
     {
@@ -37,6 +41,11 @@ final class SchemaSyncWriter
         $columns = $def['columns'] ?? null;
         if (!is_array($columns) || $columns === []) {
             throw new RuntimeException("Create stub missing columns for table '{$tableName}'");
+        }
+
+        $foreignKeys = $def['foreign_keys'] ?? [];
+        if (!is_array($foreignKeys)) {
+            $foreignKeys = [];
         }
 
         $lines = [];
@@ -59,6 +68,14 @@ final class SchemaSyncWriter
                 continue;
             }
             $lines[] = $this->emitColumnLine($c);
+        }
+
+        $fkLines = $this->emitForeignKeyLines($foreignKeys);
+        if ($fkLines !== []) {
+            $lines[] = "";
+            foreach ($fkLines as $l) {
+                $lines[] = $l;
+            }
         }
 
         $lines[] = "    });";
@@ -103,12 +120,11 @@ final class SchemaSyncWriter
             }
         }
 
-        // remove trailing blank line if we ended with drops only
         if (($ops['drops'] ?? []) !== [] && end($lines) === "") {
             array_pop($lines);
         }
 
-        foreach ($ops['renames'] as $r) {
+        foreach (($ops['renames'] ?? []) as $r) {
             $from = $this->escapeSingleQuoted((string) ($r['from'] ?? ''));
             $to = $this->escapeSingleQuoted((string) ($r['to'] ?? ''));
             if ($from !== '' && $to !== '') {
@@ -116,11 +132,11 @@ final class SchemaSyncWriter
             }
         }
 
-        if ($ops['renames'] !== [] && $ops['adds'] !== []) {
+        if (($ops['renames'] ?? []) !== [] && ($ops['adds'] ?? []) !== []) {
             $lines[] = "";
         }
 
-        foreach ($ops['adds'] as $c) {
+        foreach (($ops['adds'] ?? []) as $c) {
             if (!is_array($c) || !isset($c['name'], $c['type'])) {
                 continue;
             }
@@ -132,6 +148,46 @@ final class SchemaSyncWriter
         $lines[] = "";
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param array<int, mixed> $foreignKeys
+     * @return list<string>
+     */
+    private function emitForeignKeyLines(array $foreignKeys): array
+    {
+        $out = [];
+
+        foreach ($foreignKeys as $fk) {
+            if (!is_array($fk)) {
+                continue;
+            }
+
+            $column = $this->escapeSingleQuoted(trim((string) ($fk['column'] ?? '')));
+            $references = $this->escapeSingleQuoted(trim((string) ($fk['references'] ?? '')));
+            $on = $this->escapeSingleQuoted(trim((string) ($fk['on'] ?? '')));
+
+            if ($column === '' || $references === '' || $on === '') {
+                continue;
+            }
+
+            $onDelete = $fk['onDelete'] ?? null;
+            if ($onDelete !== null) {
+                $onDelete = $this->escapeSingleQuoted(trim((string) $onDelete));
+                if ($onDelete === '') {
+                    $onDelete = null;
+                }
+            }
+
+            if ($onDelete === null) {
+                $out[] = "        \$t->foreignKey('{$column}', '{$references}', '{$on}');";
+                continue;
+            }
+
+            $out[] = "        \$t->foreignKey('{$column}', '{$references}', '{$on}', '{$onDelete}');";
+        }
+
+        return $out;
     }
 
     /**

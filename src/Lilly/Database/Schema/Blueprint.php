@@ -100,21 +100,7 @@ final class Blueprint
         return $this->addColumn($col);
     }
 
-    public function foreignId(string $name): Column
-    {
-        $col = new Column(
-            $name,
-            'id',
-            nullable: false,
-            unique: false,
-            primary: false,
-            autoIncrement: false
-        );
-
-        return $this->addColumn($col);
-    }
-
-    public function unsignedBigInteger(string $name): Column
+    public function unsignedInteger(string $name): Column
     {
         $col = new Column(
             $name,
@@ -195,13 +181,51 @@ final class Blueprint
     }
 
     /**
-     * Add a foreign key definition.
+     * Add a foreign key definition (loose, does not validate column existence).
+     * Prefer foreignKey() for strict behavior.
      */
     public function foreign(string $column): ForeignKey
     {
         $column = trim($column);
-        $fk = new ForeignKey($column !== '' ? $column : '__invalid__');
+        if ($column === '') {
+            throw new RuntimeException("Foreign key column may not be empty on table '{$this->table}'");
+        }
+
+        $fk = new ForeignKey($column);
         $this->foreignKeys[] = $fk;
+        return $fk;
+    }
+
+    /**
+     * Strict helper: requires the FK column to exist before adding the FK.
+     *
+     * Typical usage:
+     * $t->unsignedInteger('user_id');
+     * $t->foreignKey('user_id', 'id', 'users', 'cascade');
+     */
+    public function foreignKey(
+        string $column,
+        string $references,
+        string $on,
+        string $onDelete = 'restrict'
+    ): ForeignKey {
+        $column = trim($column);
+        $references = trim($references);
+        $on = trim($on);
+
+        if ($column === '' || $references === '' || $on === '') {
+            throw new RuntimeException("foreignKey(): invalid definition on table '{$this->table}'");
+        }
+
+        if (!$this->hasColumn($column)) {
+            throw new RuntimeException(
+                "foreignKey(): column '{$column}' must be defined before adding a foreign key on table '{$this->table}'"
+            );
+        }
+
+        $fk = $this->foreign($column);
+        $fk->references($references)->on($on)->onDelete($onDelete);
+
         return $fk;
     }
 
@@ -267,5 +291,16 @@ final class Blueprint
         $col->bindBlueprint($this);
         $this->columns[] = $col;
         return $col;
+    }
+
+    private function hasColumn(string $name): bool
+    {
+        foreach ($this->columns as $col) {
+            if ($col->name === $name) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

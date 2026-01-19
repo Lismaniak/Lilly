@@ -78,7 +78,7 @@ final class SchemaSyncManifest
     }
 
     /**
-     * @return array{table:string, columns:list<array<string,mixed>>, was:array<string,list<string>>}
+     * @return array{table:string, columns:list<array<string,mixed>>, foreign_keys:list<array{column:string,references:string,on:string,onDelete:string|null}>, was:array<string,list<string>>}
      */
     private function tableDefinition(string $tableName, string $tableClass): array
     {
@@ -108,11 +108,72 @@ final class SchemaSyncManifest
 
         $cols = $this->normalizeColumnsForManifest($cols);
 
+        $foreignKeys = [];
+        if (method_exists($tableClass, 'foreignKeys')) {
+            try {
+                $raw = $tableClass::foreignKeys();
+            } catch (\Throwable $e) {
+                throw new RuntimeException(
+                    "Failed to read foreign keys for {$tableClass}: " . $e->getMessage(),
+                    previous: $e
+                );
+            }
+
+            if (is_array($raw)) {
+                $foreignKeys = $this->normalizeForeignKeysForManifest($raw);
+            }
+        }
+
         return [
             'table' => $tableName,
             'columns' => $cols,
+            'foreign_keys' => $foreignKeys,
             'was' => $this->normalizeWasMap($bp->was()),
         ];
+    }
+
+    /**
+     * @param array<int, mixed> $raw
+     * @return list<array{column:string,references:string,on:string,onDelete:string|null}>
+     */
+    private function normalizeForeignKeysForManifest(array $raw): array
+    {
+        $out = [];
+
+        foreach ($raw as $fk) {
+            if (!is_array($fk)) {
+                continue;
+            }
+
+            $column = isset($fk['column']) ? trim((string) $fk['column']) : '';
+            $references = isset($fk['references']) ? trim((string) $fk['references']) : '';
+            $on = isset($fk['on']) ? trim((string) $fk['on']) : '';
+            $onDelete = array_key_exists('onDelete', $fk)
+                ? (is_string($fk['onDelete']) ? trim($fk['onDelete']) : null)
+                : null;
+
+            if ($column === '' || $references === '' || $on === '') {
+                continue;
+            }
+
+            if ($onDelete === '') {
+                $onDelete = null;
+            }
+
+            $out[] = [
+                'column' => $column,
+                'references' => $references,
+                'on' => $on,
+                'onDelete' => $onDelete,
+            ];
+        }
+
+        usort(
+            $out,
+            static fn (array $a, array $b): int => ($a['column'] . '|' . $a['on']) <=> ($b['column'] . '|' . $b['on'])
+        );
+
+        return $out;
     }
 
     /**
