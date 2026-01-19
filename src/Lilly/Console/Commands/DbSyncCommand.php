@@ -32,7 +32,11 @@ final class DbSyncCommand extends Command
         $sync = new SchemaSync(projectRoot: $this->projectRoot);
         $result = $sync->generate(domain: $domain !== '' ? $domain : null);
 
+        $verbose = $output->isVerbose();
         foreach ($result->lines as $line) {
+            if (!$verbose && str_starts_with($line, ' - ')) {
+                continue;
+            }
             $output->writeln($line);
         }
 
