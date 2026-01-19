@@ -69,7 +69,11 @@ final class SchemaSyncWriter
     }
 
     /**
-     * @param array{renames:list<array{from:string,to:string}>, adds:list<array<string,mixed>>} $ops
+     * @param array{
+     *   drops:list<string>,
+     *   renames:list<array{from:string,to:string}>,
+     *   adds:list<array<string,mixed>>
+     * } $ops
      */
     private function updateTableMigrationStub(string $domain, string $tableName, array $ops): string
     {
@@ -89,6 +93,20 @@ final class SchemaSyncWriter
         $lines[] = "    \$schema = new Schema(\$pdo);";
         $lines[] = "";
         $lines[] = "    \$schema->table('" . $this->escapeSingleQuoted($tableName) . "', function (Blueprint \$t): void {";
+
+        foreach (($ops['drops'] ?? []) as $name) {
+            $name = $this->escapeSingleQuoted((string) $name);
+            if ($name !== '') {
+                $lines[] = "        // DROP inferred: removed from define()";
+                $lines[] = "        \$t->drop('{$name}');";
+                $lines[] = "";
+            }
+        }
+
+        // remove trailing blank line if we ended with drops only
+        if (($ops['drops'] ?? []) !== [] && end($lines) === "") {
+            array_pop($lines);
+        }
 
         foreach ($ops['renames'] as $r) {
             $from = $this->escapeSingleQuoted((string) ($r['from'] ?? ''));

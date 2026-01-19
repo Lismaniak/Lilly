@@ -16,7 +16,6 @@ final class UsersTable
     {
         $t->id();
         $t->string('name');
-        $t->string('test3')->was(['test2', 'test']);
         $t->timestamps();
     }
 }

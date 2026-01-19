@@ -117,7 +117,7 @@ final class SchemaSync
 
                 $ops = $this->planner->buildUpdateOps($approvedDef, $desiredDef);
 
-                if ($ops['renames'] === [] && $ops['adds'] === []) {
+                if (($ops['drops'] ?? []) === [] && ($ops['renames'] ?? []) === [] && ($ops['adds'] ?? []) === []) {
                     continue;
                 }
 

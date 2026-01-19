@@ -22,38 +22,58 @@ final class SchemaSyncPlanner
     /**
      * @return array{renames:list<array{from:string,to:string}>, adds:list<array<string,mixed>>}
      */
+    /**
+     * @return array{
+     *   drops:list<string>,
+     *   renames:list<array{from:string,to:string}>,
+     *   adds:list<array<string,mixed>>
+     * }
+     */
     public function buildUpdateOps(array $approvedDef, array $desiredDef): array
     {
         $approvedCols = $approvedDef['columns'] ?? [];
         $desiredCols = $desiredDef['columns'] ?? [];
 
         if (!is_array($approvedCols) || !is_array($desiredCols)) {
-            return ['renames' => [], 'adds' => []];
+            return ['drops' => [], 'renames' => [], 'adds' => []];
         }
 
-        $approvedSet = [];
+        $approvedSet = [];     // name => true
+        $approvedNames = [];   // ordered list for stable output
         foreach ($approvedCols as $c) {
             if (!is_array($c) || !isset($c['name'])) {
                 continue;
             }
             $n = trim((string) $c['name']);
-            if ($n !== '') {
+            if ($n === '') {
+                continue;
+            }
+            if (!isset($approvedSet[$n])) {
                 $approvedSet[$n] = true;
+                $approvedNames[] = $n;
             }
         }
 
-        $desiredByName = [];
+        $desiredByName = []; // name => colDef
         foreach ($desiredCols as $c) {
             if (!is_array($c) || !isset($c['name'])) {
                 continue;
             }
             $n = trim((string) $c['name']);
-            if ($n !== '') {
-                $desiredByName[$n] = $c;
+            if ($n === '') {
+                continue;
             }
+            $desiredByName[$n] = $c;
+        }
+
+        $desiredSet = [];
+        foreach ($desiredByName as $n => $_c) {
+            $desiredSet[$n] = true;
         }
 
         $renames = [];
+        $protected = []; // columns participating in rename, never drop in same plan
+
         $was = $desiredDef['was'] ?? [];
         if (!is_array($was)) {
             $was = [];
@@ -69,7 +89,7 @@ final class SchemaSyncPlanner
             }
 
             if (isset($approvedSet[$to])) {
-                continue;
+                continue; // target already exists in approved
             }
 
             if (!is_array($fromList)) {
@@ -107,6 +127,9 @@ final class SchemaSyncPlanner
 
                 $renames[] = ['from' => $from, 'to' => $to];
 
+                $protected[$from] = true;
+                $protected[$to] = true;
+
                 unset($approvedSet[$from]);
                 $approvedSet[$to] = true;
             }
@@ -124,7 +147,21 @@ final class SchemaSyncPlanner
             fn (array $a, array $b): int => ((string) ($a['name'] ?? '')) <=> ((string) ($b['name'] ?? ''))
         );
 
+        $drops = [];
+        foreach ($approvedNames as $n) {
+            if (isset($desiredSet[$n])) {
+                continue; // still desired
+            }
+            if (isset($protected[$n])) {
+                continue; // involved in rename
+            }
+            $drops[] = $n;
+        }
+
+        sort($drops);
+
         return [
+            'drops' => $drops,
             'renames' => $renames,
             'adds' => $adds,
         ];

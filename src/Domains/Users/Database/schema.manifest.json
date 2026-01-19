@@ -1,0 +1,97 @@
+{
+    "domain": "Users",
+    "generated_at": "2026-01-19T19:01:49+00:00",
+    "schema_hash": "fadb561d84814f78ce13edab3d7288f9931d7901f8cece2b3fae83907c79027f",
+    "tables": {
+        "user_mails": {
+            "class": "Domains\\Users\\Database\\Tables\\UserMailsTable",
+            "def": {
+                "table": "user_mails",
+                "columns": [
+                    {
+                        "name": "created_at",
+                        "type": "timestamp",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "id",
+                        "type": "id",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": true,
+                        "auto_increment": true,
+                        "default": null
+                    },
+                    {
+                        "name": "testmail",
+                        "type": "string:255",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "updated_at",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    }
+                ],
+                "was": []
+            }
+        },
+        "users": {
+            "class": "Domains\\Users\\Database\\Tables\\UsersTable",
+            "def": {
+                "table": "users",
+                "columns": [
+                    {
+                        "name": "created_at",
+                        "type": "timestamp",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "id",
+                        "type": "id",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": true,
+                        "auto_increment": true,
+                        "default": null
+                    },
+                    {
+                        "name": "name",
+                        "type": "string:255",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "updated_at",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    }
+                ],
+                "was": []
+            }
+        }
+    }
+}
