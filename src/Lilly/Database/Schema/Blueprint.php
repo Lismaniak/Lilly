@@ -33,6 +33,11 @@ final class Blueprint
     private array $foreignKeys = [];
 
     /**
+     * @var list<string>
+     */
+    private array $dropForeignKeys = [];
+
+    /**
      * Column rename hints: newName => list<oldName>
      *
      * @var array<string, list<string>>
@@ -84,6 +89,14 @@ final class Blueprint
     public function changes(): array
     {
         return $this->changeColumns;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function dropForeignKeys(): array
+    {
+        return $this->dropForeignKeys;
     }
 
     public function id(string $name = 'id'): Column
@@ -180,6 +193,16 @@ final class Blueprint
         return $c;
     }
 
+    public function dropForeignKey(string $name): void
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return;
+        }
+
+        $this->dropForeignKeys[] = $name;
+    }
+
     /**
      * Add a foreign key definition (loose, does not validate column existence).
      * Prefer foreignKey() for strict behavior.
@@ -200,7 +223,7 @@ final class Blueprint
      * Strict helper: requires the FK column to exist before adding the FK.
      *
      * Typical usage:
-     * $t->unsignedInteger('user_id');
+     * $t->unsignedBigInteger('user_id');
      * $t->foreignKey('user_id', 'id', 'users', 'cascade');
      */
     public function foreignKey(

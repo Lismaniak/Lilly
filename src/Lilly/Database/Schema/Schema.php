@@ -45,6 +45,8 @@ final class Schema
      * - rename columns
      * - change type/nullable/default
      * - change unique (via ColumnChange->unique())
+     * - add foreign keys
+     * - drop foreign keys (NEW, mysql only)
      *
      * @param callable(Blueprint): void $callback
      */
@@ -59,14 +61,16 @@ final class Schema
         $changes = $t->changes();
         $fks = $t->foreignKeys();
 
-        if ($adds === [] && $drops === [] && $renames === [] && $changes === [] && $fks === []) {
+        $dropFks = method_exists($t, 'dropForeignKeys') ? $t->dropForeignKeys() : [];
+
+        if ($adds === [] && $drops === [] && $renames === [] && $changes === [] && $fks === [] && $dropFks === []) {
             return;
         }
 
         $driver = $this->driver();
 
         if ($driver === 'sqlite') {
-            if ($fks !== []) {
+            if ($fks !== [] || $dropFks !== []) {
                 throw new RuntimeException('SQLite foreign keys are not supported yet in Lilly migrations. Use MySQL for now.');
             }
 
@@ -86,6 +90,18 @@ final class Schema
         }
 
         if ($driver === 'mysql') {
+            foreach ($dropFks as $fkName) {
+                $fkName = trim((string) $fkName);
+                if ($fkName === '') {
+                    continue;
+                }
+
+                $sql = "ALTER TABLE " . $this->qiMysql($table) .
+                    " DROP FOREIGN KEY " . $this->qiMysql($fkName);
+
+                $this->pdo->exec($sql);
+            }
+
             foreach ($drops as $name) {
                 $sql = "ALTER TABLE " . $this->qiMysql($table) . " DROP COLUMN " . $this->qiMysql($name);
                 $this->pdo->exec($sql);
