@@ -30,6 +30,7 @@ final class SchemaSyncWriter
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
      *   adds:list<array<string,mixed>>,
+     *   changes:list<array{name:string,type:?string,nullable:?bool,default:mixed,unique:?bool}>,
      *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>,
      *   foreign_keys_drops?:list<string>
      * } $ops
@@ -114,6 +115,7 @@ final class SchemaSyncWriter
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
      *   adds:list<array<string,mixed>>,
+     *   changes:list<array{name:string,type:?string,nullable:?bool,default:mixed,unique:?bool}>,
      *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>,
      *   foreign_keys_drops?:list<string>
      * } $ops
@@ -125,6 +127,10 @@ final class SchemaSyncWriter
         $drops = $ops['drops'] ?? [];
         $renames = $ops['renames'] ?? [];
         $adds = $ops['adds'] ?? [];
+        $changes = $ops['changes'] ?? [];
+        if (!is_array($changes)) {
+            $changes = [];
+        }
 
         $fkAdds = $ops['foreign_keys_adds'] ?? [];
         if (!is_array($fkAdds)) {
@@ -158,9 +164,16 @@ final class SchemaSyncWriter
         $hadDrops = $drops !== [];
         $hadRenames = $renames !== [];
         $hadAdds = $adds !== [];
+        $hadChanges = $changes !== [];
         $hadFkAdds = $fkAdds !== [];
 
-        if (($hadFkDrops || $hadDrops || $hadRenames) && ($hadAdds || $hadFkAdds)) {
+        if (($hadFkDrops || $hadDrops || $hadRenames) && ($hadChanges || $hadAdds || $hadFkAdds)) {
+            $this->ensureBlankLine($lines);
+        }
+
+        $this->emitChangeLines($lines, $changes);
+
+        if ($hadChanges && ($hadAdds || $hadFkAdds)) {
             $this->ensureBlankLine($lines);
         }
 
@@ -271,6 +284,47 @@ final class SchemaSyncWriter
 
         if ($emitted) {
             return;
+        }
+    }
+
+    /**
+     * @param list<array{name:string,type:?string,nullable:?bool,default:mixed,unique:?bool}> $changes
+     */
+    private function emitChangeLines(array &$lines, array $changes): void
+    {
+        foreach ($changes as $ch) {
+            if (!is_array($ch) || !isset($ch['name'])) {
+                continue;
+            }
+
+            $name = $this->escapeSingleQuoted(trim((string) $ch['name']));
+            if ($name === '') {
+                continue;
+            }
+
+            $expr = "\$t->change('{$name}')";
+
+            $type = $ch['type'] ?? null;
+            if (is_string($type)) {
+                $type = trim($type);
+                if ($type !== '') {
+                    $expr .= "->type('" . $this->escapeSingleQuoted($type) . "')";
+                }
+            }
+
+            if (array_key_exists('nullable', $ch) && $ch['nullable'] !== null) {
+                $expr .= $ch['nullable'] ? "->nullable(true)" : "->nullable(false)";
+            }
+
+            if (array_key_exists('default', $ch) && $ch['default'] !== '__KEEP__') {
+                $expr .= "->default(" . $this->exportPhpValue($ch['default']) . ")";
+            }
+
+            if (array_key_exists('unique', $ch) && $ch['unique'] !== null) {
+                $expr .= $ch['unique'] ? "->unique(true)" : "->unique(false)";
+            }
+
+            $lines[] = "        {$expr};";
         }
     }
 
@@ -481,6 +535,7 @@ final class SchemaSyncWriter
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
      *   adds:list<array<string,mixed>>,
+     *   changes:list<array{name:string,type:?string,nullable:?bool,default:mixed,unique:?bool}>,
      *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>,
      *   foreign_keys_drops?:list<string>
      * } $ops
@@ -517,6 +572,15 @@ final class SchemaSyncWriter
             $renameParts[] = "{$from}_to_{$to}";
         }
         $this->appendNameParts($parts, $renameParts, 'rename', 2);
+
+        $changeNames = [];
+        foreach (($ops['changes'] ?? []) as $change) {
+            if (!is_array($change) || !isset($change['name'])) {
+                continue;
+            }
+            $changeNames[] = (string) $change['name'];
+        }
+        $this->appendNameParts($parts, $changeNames, 'change');
 
         $fkAddNames = [];
         foreach (($ops['foreign_keys_adds'] ?? []) as $fkAdd) {
