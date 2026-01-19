@@ -1,0 +1,19 @@
+{
+    "domain": "Users",
+    "schema_hash": "dc988372383cd0aa79e2e4420935b6c3e4a793795afda51692c7368aaf551515",
+    "generated_at": "2026-01-19T21:06:41+00:00",
+    "ops": [
+        {
+            "op": "create_table",
+            "table": "user_mails",
+            "file": "2026_01_19_210641_create_user_mails_table_with_created_at_id_testmail_and_2_more.php",
+            "class": "Domains\\Users\\Database\\Tables\\UserMailsTable"
+        },
+        {
+            "op": "create_table",
+            "table": "users",
+            "file": "2026_01_19_210641_create_users_table_with_created_at_id_name_and_1_more.php",
+            "class": "Domains\\Users\\Database\\Tables\\UsersTable"
+        }
+    ]
+}

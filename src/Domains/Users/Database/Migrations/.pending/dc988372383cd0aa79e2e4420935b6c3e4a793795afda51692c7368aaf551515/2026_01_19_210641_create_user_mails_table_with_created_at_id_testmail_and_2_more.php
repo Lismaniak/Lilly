@@ -15,5 +15,8 @@ return function (PDO $pdo): void {
         $t->id('id');
         $t->string('testmail', 255);
         $t->timestamp('updated_at')->nullable();
+        $t->unsignedBigInteger('user_id');
+
+        $t->foreignKey('user_id', 'id', 'users', 'cascade');
     });
 };
