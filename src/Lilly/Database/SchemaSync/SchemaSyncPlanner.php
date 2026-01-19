@@ -20,13 +20,11 @@ final class SchemaSyncPlanner
     }
 
     /**
-     * @return array{renames:list<array{from:string,to:string}>, adds:list<array<string,mixed>>}
-     */
-    /**
      * @return array{
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
-     *   adds:list<array<string,mixed>>
+     *   adds:list<array<string,mixed>>,
+     *   foreign_keys_adds:list<array{column:string,references:string,on:string,onDelete:string|null}>
      * }
      */
     public function buildUpdateOps(array $approvedDef, array $desiredDef): array
@@ -35,7 +33,7 @@ final class SchemaSyncPlanner
         $desiredCols = $desiredDef['columns'] ?? [];
 
         if (!is_array($approvedCols) || !is_array($desiredCols)) {
-            return ['drops' => [], 'renames' => [], 'adds' => []];
+            return ['drops' => [], 'renames' => [], 'adds' => [], 'foreign_keys_adds' => []];
         }
 
         $approvedSet = [];     // name => true
@@ -144,7 +142,7 @@ final class SchemaSyncPlanner
 
         usort(
             $adds,
-            fn (array $a, array $b): int => ((string) ($a['name'] ?? '')) <=> ((string) ($b['name'] ?? ''))
+            static fn (array $a, array $b): int => ((string) ($a['name'] ?? '')) <=> ((string) ($b['name'] ?? ''))
         );
 
         $drops = [];
@@ -160,10 +158,90 @@ final class SchemaSyncPlanner
 
         sort($drops);
 
+        $foreignKeyAdds = $this->planForeignKeyAdds($approvedDef, $desiredDef);
+
         return [
             'drops' => $drops,
             'renames' => $renames,
             'adds' => $adds,
+            'foreign_keys_adds' => $foreignKeyAdds,
         ];
+    }
+
+    /**
+     * @return list<array{column:string,references:string,on:string,onDelete:string|null}>
+     */
+    private function planForeignKeyAdds(array $approvedDef, array $desiredDef): array
+    {
+        $approvedFks = $approvedDef['foreign_keys'] ?? [];
+        $desiredFks = $desiredDef['foreign_keys'] ?? [];
+
+        if (!is_array($approvedFks)) {
+            $approvedFks = [];
+        }
+        if (!is_array($desiredFks)) {
+            $desiredFks = [];
+        }
+
+        $fkKey = static function (array $fk): string {
+            $column = trim((string) ($fk['column'] ?? ''));
+            $references = trim((string) ($fk['references'] ?? ''));
+            $on = trim((string) ($fk['on'] ?? ''));
+            $onDelete = array_key_exists('onDelete', $fk)
+                ? (is_string($fk['onDelete']) ? trim($fk['onDelete']) : null)
+                : null;
+
+            if ($onDelete === '') {
+                $onDelete = null;
+            }
+
+            return "{$column}|{$references}|{$on}|".($onDelete ?? '');
+        };
+
+        $approvedMap = [];
+        foreach ($approvedFks as $fk) {
+            if (!is_array($fk)) {
+                continue;
+            }
+            $approvedMap[$fkKey($fk)] = $fk;
+        }
+
+        $desiredMap = [];
+        foreach ($desiredFks as $fk) {
+            if (!is_array($fk)) {
+                continue;
+            }
+            $desiredMap[$fkKey($fk)] = $fk;
+        }
+
+        $adds = [];
+        foreach ($desiredMap as $k => $fk) {
+            if (!isset($approvedMap[$k])) {
+                $adds[] = $fk;
+            }
+        }
+
+        $removals = [];
+        foreach ($approvedMap as $k => $_fk) {
+            if (!isset($desiredMap[$k])) {
+                $removals[] = $k;
+            }
+        }
+
+        if ($removals !== []) {
+            throw new RuntimeException(
+                "Foreign key removals/changes are not supported by schema sync yet. " .
+                "Create a manual migration that drops/recreates constraints. " .
+                "Missing keys: " . implode(', ', $removals)
+            );
+        }
+
+        usort(
+            $adds,
+            static fn (array $a, array $b): int => ((string) ($a['column'] ?? '') . '|' . (string) ($a['on'] ?? ''))
+                <=> ((string) ($b['column'] ?? '') . '|' . (string) ($b['on'] ?? ''))
+        );
+
+        return $adds;
     }
 }

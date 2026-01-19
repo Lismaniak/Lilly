@@ -1,7 +1,7 @@
 {
     "domain": "Users",
-    "generated_at": "2026-01-19T19:01:49+00:00",
-    "schema_hash": "fadb561d84814f78ce13edab3d7288f9931d7901f8cece2b3fae83907c79027f",
+    "generated_at": "2026-01-19T19:44:58+00:00",
+    "schema_hash": "dc988372383cd0aa79e2e4420935b6c3e4a793795afda51692c7368aaf551515",
     "tables": {
         "user_mails": {
             "class": "Domains\\Users\\Database\\Tables\\UserMailsTable",
@@ -43,6 +43,23 @@
                         "primary": false,
                         "auto_increment": false,
                         "default": null
+                    },
+                    {
+                        "name": "user_id",
+                        "type": "ubigint",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    }
+                ],
+                "foreign_keys": [
+                    {
+                        "column": "user_id",
+                        "references": "id",
+                        "on": "users",
+                        "onDelete": "cascade"
                     }
                 ],
                 "was": []
@@ -90,6 +107,7 @@
                         "default": null
                     }
                 ],
+                "foreign_keys": [],
                 "was": []
             }
         }

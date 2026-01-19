@@ -14,6 +14,7 @@ final class SchemaSyncWriter
         $path = "{$pendingDir}/{$file}";
 
         file_put_contents($path, $this->createTableMigrationStub($domain, $tableName, $def));
+
         return $file;
     }
 
@@ -21,7 +22,8 @@ final class SchemaSyncWriter
      * @param array{
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
-     *   adds:list<array<string,mixed>>
+     *   adds:list<array<string,mixed>>,
+     *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>
      * } $ops
      */
     public function writeUpdateMigration(string $pendingDir, string $domain, string $tableName, array $ops): string
@@ -31,6 +33,7 @@ final class SchemaSyncWriter
         $path = "{$pendingDir}/{$file}";
 
         file_put_contents($path, $this->updateTableMigrationStub($domain, $tableName, $ops));
+
         return $file;
     }
 
@@ -89,12 +92,22 @@ final class SchemaSyncWriter
      * @param array{
      *   drops:list<string>,
      *   renames:list<array{from:string,to:string}>,
-     *   adds:list<array<string,mixed>>
+     *   adds:list<array<string,mixed>>,
+     *   foreign_keys_adds?:list<array{column:string,references:string,on:string,onDelete?:string|null}>
      * } $ops
      */
     private function updateTableMigrationStub(string $domain, string $tableName, array $ops): string
     {
         $ns = "Domains\\{$domain}\\Database\\Migrations";
+
+        $drops = $ops['drops'] ?? [];
+        $renames = $ops['renames'] ?? [];
+        $adds = $ops['adds'] ?? [];
+
+        $fkAdds = $ops['foreign_keys_adds'] ?? [];
+        if (!is_array($fkAdds)) {
+            $fkAdds = [];
+        }
 
         $lines = [];
         $lines[] = "<?php";
@@ -111,43 +124,122 @@ final class SchemaSyncWriter
         $lines[] = "";
         $lines[] = "    \$schema->table('" . $this->escapeSingleQuoted($tableName) . "', function (Blueprint \$t): void {";
 
-        foreach (($ops['drops'] ?? []) as $name) {
-            $name = $this->escapeSingleQuoted((string) $name);
-            if ($name !== '') {
-                $lines[] = "        // DROP inferred: removed from define()";
-                $lines[] = "        \$t->drop('{$name}');";
-                $lines[] = "";
-            }
+        $this->emitDropLines($lines, $drops);
+        $this->emitRenameLines($lines, $renames);
+
+        $hadDrops = $drops !== [];
+        $hadRenames = $renames !== [];
+        $hadAdds = $adds !== [];
+        $hadFkAdds = $fkAdds !== [];
+
+        if (($hadDrops || $hadRenames) && ($hadAdds || $hadFkAdds)) {
+            $this->ensureBlankLine($lines);
         }
 
-        if (($ops['drops'] ?? []) !== [] && end($lines) === "") {
-            array_pop($lines);
+        $this->emitAddColumnLines($lines, $adds);
+
+        if ($hadAdds && $hadFkAdds) {
+            $this->ensureBlankLine($lines);
         }
 
-        foreach (($ops['renames'] ?? []) as $r) {
-            $from = $this->escapeSingleQuoted((string) ($r['from'] ?? ''));
-            $to = $this->escapeSingleQuoted((string) ($r['to'] ?? ''));
-            if ($from !== '' && $to !== '') {
-                $lines[] = "        \$t->rename('{$from}', '{$to}');";
-            }
-        }
-
-        if (($ops['renames'] ?? []) !== [] && ($ops['adds'] ?? []) !== []) {
-            $lines[] = "";
-        }
-
-        foreach (($ops['adds'] ?? []) as $c) {
-            if (!is_array($c) || !isset($c['name'], $c['type'])) {
-                continue;
-            }
-            $lines[] = $this->emitColumnLine($c);
-        }
+        $this->emitForeignKeyAddLines($lines, $fkAdds);
 
         $lines[] = "    });";
         $lines[] = "};";
         $lines[] = "";
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param list<string> $drops
+     */
+    private function emitDropLines(array &$lines, array $drops): void
+    {
+        foreach ($drops as $name) {
+            $name = $this->escapeSingleQuoted((string) $name);
+            if ($name === '') {
+                continue;
+            }
+
+            $lines[] = "        // DROP inferred: removed from define()";
+            $lines[] = "        \$t->drop('{$name}');";
+            $lines[] = "";
+        }
+
+        if ($drops !== [] && end($lines) === "") {
+            array_pop($lines);
+        }
+    }
+
+    /**
+     * @param list<array{from:string,to:string}> $renames
+     */
+    private function emitRenameLines(array &$lines, array $renames): void
+    {
+        $emitted = false;
+
+        foreach ($renames as $r) {
+            if (!is_array($r)) {
+                continue;
+            }
+
+            $from = $this->escapeSingleQuoted((string) ($r['from'] ?? ''));
+            $to = $this->escapeSingleQuoted((string) ($r['to'] ?? ''));
+
+            if ($from === '' || $to === '') {
+                continue;
+            }
+
+            $lines[] = "        \$t->rename('{$from}', '{$to}');";
+            $emitted = true;
+        }
+
+        if ($emitted) {
+            return;
+        }
+    }
+
+    /**
+     * @param list<array<string,mixed>> $adds
+     */
+    private function emitAddColumnLines(array &$lines, array $adds): void
+    {
+        foreach ($adds as $c) {
+            if (!is_array($c) || !isset($c['name'], $c['type'])) {
+                continue;
+            }
+            $lines[] = $this->emitColumnLine($c);
+        }
+    }
+
+    /**
+     * @param list<array{column:string,references:string,on:string,onDelete?:string|null}> $fkAdds
+     */
+    private function emitForeignKeyAddLines(array &$lines, array $fkAdds): void
+    {
+        if ($fkAdds === []) {
+            return;
+        }
+
+        $fkLines = $this->emitForeignKeyLines($fkAdds);
+        if ($fkLines === []) {
+            return;
+        }
+
+        foreach ($fkLines as $l) {
+            $lines[] = $l;
+        }
+    }
+
+    private function ensureBlankLine(array &$lines): void
+    {
+        if ($lines === []) {
+            return;
+        }
+        if (end($lines) !== "") {
+            $lines[] = "";
+        }
     }
 
     /**

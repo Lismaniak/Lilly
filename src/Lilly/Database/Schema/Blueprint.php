@@ -100,7 +100,7 @@ final class Blueprint
         return $this->addColumn($col);
     }
 
-    public function unsignedInteger(string $name): Column
+    public function unsignedBigInteger(string $name): Column
     {
         $col = new Column(
             $name,
@@ -224,7 +224,7 @@ final class Blueprint
         }
 
         $fk = $this->foreign($column);
-        $fk->references($references)->on($on)->onDelete($onDelete);
+        $fk->references($on, $references)->onDelete($onDelete);
 
         return $fk;
     }

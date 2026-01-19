@@ -16,7 +16,7 @@ final class UserMailsTable
     {
         $t->id();
         $t->string('testmail');
-        $t->unsignedInteger('user_id');
+        $t->unsignedBigInteger('user_id');
         $t->timestamps();
     }
 

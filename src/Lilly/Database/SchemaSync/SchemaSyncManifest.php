@@ -78,7 +78,12 @@ final class SchemaSyncManifest
     }
 
     /**
-     * @return array{table:string, columns:list<array<string,mixed>>, foreign_keys:list<array{column:string,references:string,on:string,onDelete:string|null}>, was:array<string,list<string>>}
+     * @return array{
+     *   table:string,
+     *   columns:list<array<string,mixed>>,
+     *   foreign_keys:list<array{column:string,references:string,on:string,onDelete:string|null}>,
+     *   was:array<string,list<string>>
+     * }
      */
     private function tableDefinition(string $tableName, string $tableClass): array
     {
@@ -108,6 +113,8 @@ final class SchemaSyncManifest
 
         $cols = $this->normalizeColumnsForManifest($cols);
 
+        $definedCols = $this->definedColumnSet($cols);
+
         $foreignKeys = [];
         if (method_exists($tableClass, 'foreignKeys')) {
             try {
@@ -120,7 +127,12 @@ final class SchemaSyncManifest
             }
 
             if (is_array($raw)) {
-                $foreignKeys = $this->normalizeForeignKeysForManifest($raw);
+                $foreignKeys = $this->normalizeForeignKeysForManifest(
+                    raw: $raw,
+                    definedCols: $definedCols,
+                    tableClass: $tableClass,
+                    tableName: $tableName
+                );
             }
         }
 
@@ -133,11 +145,36 @@ final class SchemaSyncManifest
     }
 
     /**
+     * @param list<array<string,mixed>> $cols
+     * @return array<string,true>
+     */
+    private function definedColumnSet(array $cols): array
+    {
+        $set = [];
+        foreach ($cols as $c) {
+            if (!is_array($c) || !isset($c['name'])) {
+                continue;
+            }
+            $n = trim((string) $c['name']);
+            if ($n === '') {
+                continue;
+            }
+            $set[$n] = true;
+        }
+        return $set;
+    }
+
+    /**
      * @param array<int, mixed> $raw
+     * @param array<string,true> $definedCols
      * @return list<array{column:string,references:string,on:string,onDelete:string|null}>
      */
-    private function normalizeForeignKeysForManifest(array $raw): array
-    {
+    private function normalizeForeignKeysForManifest(
+        array $raw,
+        array $definedCols,
+        string $tableClass,
+        string $tableName
+    ): array {
         $out = [];
 
         foreach ($raw as $fk) {
@@ -148,12 +185,32 @@ final class SchemaSyncManifest
             $column = isset($fk['column']) ? trim((string) $fk['column']) : '';
             $references = isset($fk['references']) ? trim((string) $fk['references']) : '';
             $on = isset($fk['on']) ? trim((string) $fk['on']) : '';
-            $onDelete = array_key_exists('onDelete', $fk)
-                ? (is_string($fk['onDelete']) ? trim($fk['onDelete']) : null)
-                : null;
+            $onDelete = null;
+            if (array_key_exists('onDelete', $fk)) {
+                if ($fk['onDelete'] === null) {
+                    $onDelete = null;
+                } elseif (is_string($fk['onDelete'])) {
+                    $onDelete = trim($fk['onDelete']);
+                } else {
+                    throw new RuntimeException(
+                        "Invalid foreign key in {$tableClass}::foreignKeys() for table '{$tableName}': " .
+                        "onDelete must be string|null"
+                    );
+                }
+            }
 
             if ($column === '' || $references === '' || $on === '') {
-                continue;
+                throw new RuntimeException(
+                    "Invalid foreign key in {$tableClass}::foreignKeys() for table '{$tableName}': " .
+                    "each entry must contain non-empty 'column', 'references', and 'on'"
+                );
+            }
+
+            if (!isset($definedCols[$column])) {
+                throw new RuntimeException(
+                    "Invalid foreign key in {$tableClass}::foreignKeys() for table '{$tableName}': " .
+                    "column '{$column}' is not defined in define()"
+                );
             }
 
             if ($onDelete === '') {

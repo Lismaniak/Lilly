@@ -117,7 +117,12 @@ final class SchemaSync
 
                 $ops = $this->planner->buildUpdateOps($approvedDef, $desiredDef);
 
-                if (($ops['drops'] ?? []) === [] && ($ops['renames'] ?? []) === [] && ($ops['adds'] ?? []) === []) {
+                if (
+                    ($ops['drops'] ?? []) === []
+                    && ($ops['renames'] ?? []) === []
+                    && ($ops['adds'] ?? []) === []
+                    && ($ops['foreign_keys_adds'] ?? []) === []
+                ) {
                     continue;
                 }
 

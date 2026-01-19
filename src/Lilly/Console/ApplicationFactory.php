@@ -12,7 +12,6 @@ use Lilly\Console\Commands\DbSyncDiscardCommand;
 use Lilly\Console\Commands\MakeAppComponentCommand;
 use Lilly\Console\Commands\MakeAppGateCommand;
 use Lilly\Console\Commands\MakeAppPolicyCommand;
-use Lilly\Console\Commands\MakeForeignKeysCommand;
 use Lilly\Console\Commands\MakeGateCommand;
 use Lilly\Console\Commands\MakeRepoHelpersCommand;
 use Lilly\Console\Commands\MakeTableBlueprintCommand;
@@ -45,7 +44,6 @@ final class ApplicationFactory
         $app->addCommand(new RemoveAppPolicyCommand(projectRoot: $projectRoot));
         $app->addCommand(new RemoveAppGateCommand(projectRoot: $projectRoot));
         $app->addCommand(new DbFlushCommand(projectRoot: $projectRoot, config: $config));
-        $app->addCommand(new MakeForeignKeysCommand($projectRoot));
         $app->addCommand(new MakeRepoHelpersCommand($projectRoot));
         $app->addCommand(new MakeTableBlueprintCommand($projectRoot));
         $app->addCommand(new DbSyncCommand($projectRoot));
