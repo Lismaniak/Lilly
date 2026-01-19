@@ -6,14 +6,9 @@ namespace Lilly\Console;
 
 use Lilly\Config\Config;
 use Lilly\Console\Commands\DbFlushCommand;
-use Lilly\Console\Commands\DbMigrateCommand;
 use Lilly\Console\Commands\DbSyncApplyCommand;
 use Lilly\Console\Commands\DbSyncCommand;
 use Lilly\Console\Commands\DbSyncDiscardCommand;
-use Lilly\Console\Commands\DbTableMakeCommand;
-use Lilly\Console\Commands\DbTableRemoveCommand;
-use Lilly\Console\Commands\DbTableUpdateCommand;
-use Lilly\Console\Commands\DomainDbSyncCommand;
 use Lilly\Console\Commands\MakeAppComponentCommand;
 use Lilly\Console\Commands\MakeAppGateCommand;
 use Lilly\Console\Commands\MakeAppPolicyCommand;
@@ -49,7 +44,6 @@ final class ApplicationFactory
         $app->addCommand(new MakeAppGateCommand(projectRoot: $projectRoot));
         $app->addCommand(new RemoveAppPolicyCommand(projectRoot: $projectRoot));
         $app->addCommand(new RemoveAppGateCommand(projectRoot: $projectRoot));
-        $app->addCommand(new DbMigrateCommand(projectRoot: $projectRoot, config: $config));
         $app->addCommand(new DbFlushCommand(projectRoot: $projectRoot, config: $config));
         $app->addCommand(new MakeForeignKeysCommand($projectRoot));
         $app->addCommand(new MakeRepoHelpersCommand($projectRoot));

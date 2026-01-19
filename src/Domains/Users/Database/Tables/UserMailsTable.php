@@ -15,6 +15,7 @@ final class UserMailsTable
     public static function define(Blueprint $t): void
     {
         $t->id();
+        $t->string('testmail');
         $t->timestamps();
     }
 

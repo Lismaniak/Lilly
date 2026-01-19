@@ -58,7 +58,7 @@ final class DbSyncApplyCommand extends Command
             return Command::SUCCESS;
         }
 
-        $connection = strtolower($this->config->dbConnection);
+        $connection = strtolower((string) $this->config->dbConnection);
 
         foreach ($planDirs as $pendingDir) {
             $planHash = basename($pendingDir);
@@ -93,19 +93,34 @@ final class DbSyncApplyCommand extends Command
                 return Command::FAILURE;
             }
 
-            $appliedNames = [];
+            $appliedBaseline = [];
+            $appliedPending = [];
+
             try {
                 $pdoReal = (new ConnectionFactory(config: $this->config, projectRoot: $this->projectRoot))->pdo();
-                $appliedNames = $this->runPendingOnPdo($pdoReal, $domain, $pendingFiles);
+
+                // Ensure real DB has full baseline (idempotent, tracked in lilly_migrations).
+                $baselineFiles = $this->listAllApprovedMigrationFiles();
+                $appliedBaseline = $this->runFilesOnPdo($pdoReal, $baselineFiles);
+
+                // Then apply this pending plan.
+                $appliedPending = $this->runFilesOnPdo($pdoReal, $pendingFiles);
             } catch (\Throwable $e) {
                 $output->writeln("<error>Apply to real DB failed ({$planHash}):</error> " . $e->getMessage());
                 $output->writeln('<comment>This plan stays in .pending (not promoted).</comment>');
                 return Command::FAILURE;
             }
 
-            if ($appliedNames !== []) {
+            if ($appliedBaseline !== []) {
+                $output->writeln('<info>Real DB baseline applied:</info>');
+                foreach ($appliedBaseline as $name) {
+                    $output->writeln(' - ' . $name);
+                }
+            }
+
+            if ($appliedPending !== []) {
                 $output->writeln('<info>Applied to real DB:</info>');
-                foreach ($appliedNames as $name) {
+                foreach ($appliedPending as $name) {
                     $output->writeln(' - ' . $name);
                 }
             } else {
@@ -160,6 +175,8 @@ final class DbSyncApplyCommand extends Command
      */
     private function runSandbox(string $connection, string $domain, string $hash, array $pendingFiles): void
     {
+        $baselineFiles = $this->listAllApprovedMigrationFiles();
+
         if ($connection === 'sqlite') {
             $sandboxDir = "{$this->projectRoot}/var/db_sandbox";
             if (!is_dir($sandboxDir)) {
@@ -175,7 +192,9 @@ final class DbSyncApplyCommand extends Command
             $pdo->exec('PRAGMA foreign_keys = ON;');
 
             try {
-                $this->runPendingOnPdo($pdo, $domain, $pendingFiles);
+                // Build baseline into sandbox, then apply pending.
+                $this->runFilesOnPdo($pdo, $baselineFiles);
+                $this->runFilesOnPdo($pdo, $pendingFiles);
             } finally {
                 $pdo = null;
                 if (is_file($sandboxPath)) {
@@ -209,7 +228,9 @@ final class DbSyncApplyCommand extends Command
 
             $this->wipeMysqlSchema($pdoSandbox);
 
-            $this->runPendingOnPdo($pdoSandbox, $domain, $pendingFiles);
+            // Build baseline into sandbox, then apply pending.
+            $this->runFilesOnPdo($pdoSandbox, $baselineFiles);
+            $this->runFilesOnPdo($pdoSandbox, $pendingFiles);
 
             return;
         }
@@ -251,16 +272,18 @@ final class DbSyncApplyCommand extends Command
     }
 
     /**
-     * @param list<string> $pendingFiles
+     * Runs a list of migration files on a PDO connection.
+     * Each migration file name is recorded as "<Domain>/<FileName>".
+     *
+     * @param list<string> $files absolute paths
      * @return list<string> applied migration names
      */
-    private function runPendingOnPdo(PDO $pdo, string $domain, array $pendingFiles): array
+    private function runFilesOnPdo(PDO $pdo, array $files): array
     {
         $this->ensureMigrationsTable($pdo);
 
         $applied = $this->appliedMigrationNames($pdo);
         $batch = $this->nextBatchNumber($pdo);
-
         $driver = strtolower((string) $pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
 
         $namesApplied = [];
@@ -271,8 +294,14 @@ final class DbSyncApplyCommand extends Command
         }
 
         try {
-            foreach ($pendingFiles as $path) {
+            foreach ($files as $path) {
                 $base = basename($path);
+
+                $domain = $this->domainFromMigrationPath($path);
+                if ($domain === '') {
+                    throw new RuntimeException("Could not infer domain for migration: {$path}");
+                }
+
                 $name = "{$domain}/{$base}";
 
                 if (isset($applied[$name])) {
@@ -286,7 +315,7 @@ final class DbSyncApplyCommand extends Command
 
                 $callable($pdo);
 
-                $this->markApplied($pdo, $name, $batch, $driver);
+                $this->markApplied($pdo, $name, $batch);
                 $namesApplied[] = $name;
             }
 
@@ -301,6 +330,71 @@ final class DbSyncApplyCommand extends Command
         }
 
         return $namesApplied;
+    }
+
+    /**
+     * @return list<string> absolute paths to ALL approved migration files across ALL domains
+     */
+    private function listAllApprovedMigrationFiles(): array
+    {
+        $root = "{$this->projectRoot}/src/Domains";
+        if (!is_dir($root)) {
+            return [];
+        }
+
+        $domains = scandir($root) ?: [];
+        $files = [];
+
+        foreach ($domains as $d) {
+            if ($d === '.' || $d === '..') {
+                continue;
+            }
+            if (str_starts_with($d, '.')) {
+                continue;
+            }
+
+            $migrationsDir = "{$root}/{$d}/Database/Migrations";
+            if (!is_dir($migrationsDir)) {
+                continue;
+            }
+
+            foreach (glob($migrationsDir . '/*.php') ?: [] as $path) {
+                $files[] = $path;
+            }
+        }
+
+        usort($files, function (string $a, string $b): int {
+            $ba = basename($a);
+            $bb = basename($b);
+            $c = strcmp($ba, $bb);
+            if ($c !== 0) {
+                return $c;
+            }
+            return strcmp($a, $b);
+        });
+
+        return array_values($files);
+    }
+
+    private function domainFromMigrationPath(string $path): string
+    {
+        $needle = '/src/Domains/';
+        $pos = strpos($path, $needle);
+        if ($pos === false) {
+            return '';
+        }
+
+        $rest = substr($path, $pos + strlen($needle));
+        if ($rest === false || $rest === '') {
+            return '';
+        }
+
+        $parts = explode('/', $rest);
+        if (!isset($parts[0]) || $parts[0] === '') {
+            return '';
+        }
+
+        return (string) $parts[0];
     }
 
     /**
@@ -375,7 +469,7 @@ final class DbSyncApplyCommand extends Command
         return $max + 1;
     }
 
-    private function markApplied(PDO $pdo, string $name, int $batch, string $driver): void
+    private function markApplied(PDO $pdo, string $name, int $batch): void
     {
         $appliedAt = gmdate('c');
 
