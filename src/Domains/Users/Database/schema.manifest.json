@@ -1,7 +1,7 @@
 {
     "domain": "Users",
-    "generated_at": "2026-01-19T21:06:41+00:00",
-    "schema_hash": "dc988372383cd0aa79e2e4420935b6c3e4a793795afda51692c7368aaf551515",
+    "generated_at": "2026-01-19T21:49:28+00:00",
+    "schema_hash": "7adbb62d4385d2480e6fcb31cc2dc993dc0cc66a785663dfe1583c9c65690c3a",
     "tables": {
         "user_mails": {
             "class": "Domains\\Users\\Database\\Tables\\UserMailsTable",
@@ -30,6 +30,24 @@
                         "name": "testmail",
                         "type": "string:255",
                         "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": "Yeah!!"
+                    },
+                    {
+                        "name": "testmail2",
+                        "type": "string:255",
+                        "nullable": false,
+                        "unique": true,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "testmail3",
+                        "type": "string:255",
+                        "nullable": true,
                         "unique": false,
                         "primary": false,
                         "auto_increment": false,

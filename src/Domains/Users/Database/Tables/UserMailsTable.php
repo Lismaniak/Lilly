@@ -15,7 +15,9 @@ final class UserMailsTable
     public static function define(Blueprint $t): void
     {
         $t->id();
-        $t->string('testmail');
+        $t->string('testmail')->default('Yeah!!');
+        $t->string('testmail2')->unique();
+        $t->string('testmail3')->nullable();
         $t->unsignedBigInteger('user_id');
         $t->timestamps();
     }
