@@ -25,6 +25,8 @@ final class UsersQueryRepository extends QueryRepository
             'Alan Turing',
             'Katherine Johnson',
             'Edsger Dijkstra',
+            'Linus Torvalds',
+            'Leslie Lamport',
         ];
 
         $limit = max(1, min($limit, count($names)));

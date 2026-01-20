@@ -5,33 +5,27 @@ namespace Domains\Users\Services\Queries;
 
 use Domains\Users\Entities\Users;
 use Domains\Users\Repositories\UsersQueryRepository;
-use Lilly\Dto\QueryDto;
-use Lilly\Dto\ResultDto;
-use Lilly\Services\QueryService;
-use RuntimeException;
 
-final class ListUsersService extends QueryService
+final class ListUsersService
 {
     public function __construct(
         private readonly UsersQueryRepository $users,
     ) {
     }
 
-    protected function execute(QueryDto $query): ResultDto
+    /**
+     * @return list<array{id:int, name:string}>
+     */
+    public function list(int $limit = 3): array
     {
-        if (!$query instanceof ListUsersQuery) {
-            throw new RuntimeException('ListUsersService expects ListUsersQuery');
-        }
+        $items = $this->users->listDummy($limit);
 
-        $items = $this->users->listDummy($query->limit);
-        $summaries = array_map(
-            static fn (Users $user): UserSummary => new UserSummary(
-                $user->id ?? 0,
-                $user->name
-            ),
+        return array_map(
+            static fn (Users $user): array => [
+                'id' => $user->id ?? 0,
+                'name' => $user->name,
+            ],
             $items
         );
-
-        return new ListUsersResult($summaries);
     }
 }
