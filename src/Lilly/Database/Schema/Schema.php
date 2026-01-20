@@ -413,6 +413,11 @@ final class Schema
             'bool' => 'INTEGER',
             'timestamp' => 'TEXT',
             'ubigint' => 'INTEGER',
+            'bigint' => 'INTEGER',
+            'uuid' => 'TEXT',
+            'json' => 'TEXT',
+            'date' => 'TEXT',
+            'datetime' => 'TEXT',
             default => throw new RuntimeException("Unsupported column type '{$type}' for sqlite"),
         };
     }
@@ -437,6 +442,11 @@ final class Schema
             'bool' => 'TINYINT(1)',
             'timestamp' => 'DATETIME',
             'ubigint' => 'BIGINT UNSIGNED',
+            'bigint' => 'BIGINT',
+            'uuid' => 'CHAR(36)',
+            'json' => 'JSON',
+            'date' => 'DATE',
+            'datetime' => 'DATETIME',
             default => throw new RuntimeException("Unsupported column type '{$type}' for mysql"),
         };
     }

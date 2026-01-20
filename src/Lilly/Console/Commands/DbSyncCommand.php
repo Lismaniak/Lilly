@@ -7,6 +7,7 @@ use Lilly\Database\SchemaSync\SchemaSync;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class DbSyncCommand extends Command
@@ -21,16 +22,18 @@ final class DbSyncCommand extends Command
     {
         $this
             ->setDescription('Generate pending migrations from domain table blueprints (no DB changes)')
-            ->addArgument('domain', InputArgument::OPTIONAL, 'Optional. Domain name, e.g. Users. If omitted, syncs all domains.');
+            ->addArgument('domain', InputArgument::OPTIONAL, 'Optional. Domain name, e.g. Users. If omitted, syncs all domains.')
+            ->addOption('allow-drop', null, InputOption::VALUE_NONE, 'Allow generating destructive drop migrations.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $arg = $input->getArgument('domain');
         $domain = is_string($arg) ? $this->normalizeDomainName($arg) : '';
+        $allowDrops = (bool) $input->getOption('allow-drop');
 
         $sync = new SchemaSync(projectRoot: $this->projectRoot);
-        $result = $sync->generate(domain: $domain !== '' ? $domain : null);
+        $result = $sync->generate(domain: $domain !== '' ? $domain : null, allowDrops: $allowDrops);
 
         $verbose = $output->isVerbose();
         foreach ($result->lines as $line) {

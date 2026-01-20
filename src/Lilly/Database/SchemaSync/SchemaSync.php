@@ -23,9 +23,10 @@ final class SchemaSync
         $this->writer = new SchemaSyncWriter();
     }
 
-    public function generate(?string $domain = null): SchemaSyncResult
+    public function generate(?string $domain = null, bool $allowDrops = false): SchemaSyncResult
     {
         $lines = [];
+        $ok = true;
 
         $domains = $domain !== null ? [$domain] : $this->discovery->discoverDomains();
         if ($domains === []) {
@@ -57,6 +58,37 @@ final class SchemaSync
             $approved = $this->manifest->readApprovedManifest($d);
             $desired = $this->manifest->buildDesiredManifest($d, $tables);
 
+            $desiredTables = array_fill_keys(array_keys($desired['tables'] ?? []), true);
+            $approvedTables = array_keys($approved['tables'] ?? []);
+            $dropTables = array_values(array_diff($approvedTables, array_keys($desired['tables'] ?? [])));
+
+            $tablesByName = [];
+            $createTables = [];
+            $updateTables = [];
+
+            foreach ($tables as $t) {
+                $tableName = $t['table'];
+                $tablesByName[$tableName] = $t;
+
+                if (!isset($approved['tables'][$tableName])) {
+                    $createTables[] = $tableName;
+                } else {
+                    $updateTables[] = $tableName;
+                }
+            }
+
+            $createOrder = $this->orderCreateTables(
+                $createTables,
+                $desired['tables'] ?? []
+            );
+
+            if (!$allowDrops && $dropTables !== []) {
+                $lines[] = "<error>{$d}:</error> drop table detected (" . implode(', ', $dropTables) . "). " .
+                    "Re-run with --allow-drop to generate drop migrations.";
+                $ok = false;
+                continue;
+            }
+
             $hash = (string) $desired['schema_hash'];
             $pendingDir = "{$pendingRoot}/{$hash}";
 
@@ -78,28 +110,7 @@ final class SchemaSync
             ];
 
             $createdFiles = 0;
-            $desiredTables = array_fill_keys(array_keys($desired['tables'] ?? []), true);
-            $approvedTables = array_keys($approved['tables'] ?? []);
-
-            $tablesByName = [];
-            $createTables = [];
-            $updateTables = [];
-
-            foreach ($tables as $t) {
-                $tableName = $t['table'];
-                $tablesByName[$tableName] = $t;
-
-                if (!isset($approved['tables'][$tableName])) {
-                    $createTables[] = $tableName;
-                } else {
-                    $updateTables[] = $tableName;
-                }
-            }
-
-            $createOrder = $this->orderCreateTables(
-                $createTables,
-                $desired['tables'] ?? []
-            );
+            $blockedDrops = false;
 
             $stampBase = time();
             $stampOffset = 0;
@@ -161,6 +172,14 @@ final class SchemaSync
 
                 $ops = $this->planner->buildUpdateOps($approvedDef, $desiredDef);
 
+                if (!$allowDrops && ($ops['drops'] ?? []) !== []) {
+                    $lines[] = "<error>{$d}:</error> drop column(s) detected in table '{$tableName}'. " .
+                        "Re-run with --allow-drop to generate drop migrations.";
+                    $blockedDrops = true;
+                    $ok = false;
+                    continue;
+                }
+
                 if (
                     ($ops['drops'] ?? []) === []
                     && ($ops['renames'] ?? []) === []
@@ -189,6 +208,10 @@ final class SchemaSync
                     continue;
                 }
 
+                if ($blockedDrops) {
+                    continue;
+                }
+
                 $file = $this->writer->writeDropMigration($pendingDir, $d, $tableName);
 
                 $plan['ops'][] = [
@@ -208,6 +231,11 @@ final class SchemaSync
                 json_encode($desired, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
             );
 
+            if ($blockedDrops) {
+                $this->fs->deleteDirectory($pendingDir);
+                continue;
+            }
+
             if ($createdFiles === 0) {
                 $this->fs->deleteDirectory($pendingDir);
                 $lines[] = "<info>{$d}:</info> nothing to generate (already approved)";
@@ -220,7 +248,7 @@ final class SchemaSync
             $lines[] = "Run: <comment>db:sync:apply {$d} {$hash}</comment> or <comment>db:sync:discard {$d} {$hash}</comment>";
         }
 
-        return new SchemaSyncResult(true, $lines);
+        return new SchemaSyncResult($ok, $lines);
     }
 
     public function accept(string $domain, string $hash): SchemaSyncResult

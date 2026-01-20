@@ -127,6 +127,20 @@ final class Blueprint
         return $this->addColumn($col);
     }
 
+    public function bigInteger(string $name): Column
+    {
+        $col = new Column(
+            $name,
+            'bigint',
+            nullable: false,
+            unique: false,
+            primary: false,
+            autoIncrement: false
+        );
+
+        return $this->addColumn($col);
+    }
+
     public function string(string $name, int $length = 255): Column
     {
         $col = new Column($name, "string:{$length}");
@@ -154,6 +168,30 @@ final class Blueprint
     public function timestamp(string $name): Column
     {
         $col = new Column($name, 'timestamp');
+        return $this->addColumn($col);
+    }
+
+    public function datetime(string $name): Column
+    {
+        $col = new Column($name, 'datetime');
+        return $this->addColumn($col);
+    }
+
+    public function date(string $name): Column
+    {
+        $col = new Column($name, 'date');
+        return $this->addColumn($col);
+    }
+
+    public function uuid(string $name): Column
+    {
+        $col = new Column($name, 'uuid');
+        return $this->addColumn($col);
+    }
+
+    public function json(string $name): Column
+    {
+        $col = new Column($name, 'json');
         return $this->addColumn($col);
     }
 
