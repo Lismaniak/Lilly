@@ -24,14 +24,43 @@ final class ListUsersService extends QueryService
         }
 
         $items = $this->users->listDummy($query->limit);
-        $summaries = array_map(
-            static fn (Users $user): UserSummary => new UserSummary(
-                $user->id ?? 0,
-                $user->name
-            ),
-            $items
-        );
 
-        return new ListUsersResult($summaries);
+        return new ListUsersResult(
+            array_map(
+                static fn (Users $user): array => [
+                    'id' => $user->id ?? 0,
+                    'name' => $user->name,
+                ],
+                $items
+            )
+        );
+    }
+}
+
+final readonly class ListUsersQuery implements QueryDto
+{
+    public function __construct(
+        public int $limit = 3,
+    ) {
+        $this->limit = max(1, min($this->limit, 50));
+    }
+}
+
+final readonly class ListUsersResult implements ResultDto
+{
+    /**
+     * @param list<array{id:int, name:string}> $users
+     */
+    public function __construct(
+        public array $users,
+    ) {
+    }
+
+    /**
+     * @return array{users:list<array{id:int, name:string}>}
+     */
+    public function toArray(): array
+    {
+        return ['users' => $this->users];
     }
 }
