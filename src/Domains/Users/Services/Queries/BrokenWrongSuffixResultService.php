@@ -11,7 +11,7 @@ final class BrokenWrongSuffixResultService extends QueryService
 {
     public function run(): ResultDto
     {
-        return $this->handle(new ValidUsersQueryForWrongSuffixResult(1));
+        return $this->handle(new ValidUsersQueryForWrongSuffixResultQuery(1));
     }
 
     protected function execute(QueryDto $query): ResultDto
@@ -20,7 +20,7 @@ final class BrokenWrongSuffixResultService extends QueryService
     }
 }
 
-readonly class ValidUsersQueryForWrongSuffixResult implements QueryDto
+readonly class ValidUsersQueryForWrongSuffixResultQuery implements QueryDto
 {
     public function __construct(public int $id)
     {

@@ -11,7 +11,7 @@ final class BrokenNonReadonlyResultService extends QueryService
 {
     public function run(): ResultDto
     {
-        return $this->handle(new ValidUsersQueryForNonReadonlyResult(1));
+        return $this->handle(new ValidUsersQueryForNonReadonlyResultQuery(1));
     }
 
     protected function execute(QueryDto $query): ResultDto
@@ -20,7 +20,7 @@ final class BrokenNonReadonlyResultService extends QueryService
     }
 }
 
-readonly class ValidUsersQueryForNonReadonlyResult implements QueryDto
+readonly class ValidUsersQueryForNonReadonlyResultQuery implements QueryDto
 {
     public function __construct(public int $id)
     {

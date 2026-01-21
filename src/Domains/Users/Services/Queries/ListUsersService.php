@@ -26,7 +26,6 @@ final class ListUsersService extends QueryService
     ): array
     {
         $result = $this->handle(new ListUsersQuery($limit, $offset));
-
         return $result->items;
     }
 
