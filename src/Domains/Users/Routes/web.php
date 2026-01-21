@@ -7,6 +7,7 @@ use Domains\Users\Services\Commands\CreateUserData;
 use Domains\Users\Services\Commands\CreateUserService;
 use Domains\Users\Services\Queries\ListUsersQuery;
 use Domains\Users\Services\Queries\ListUsersService;
+use Lilly\Dto\CommandDataDto;
 use Lilly\Http\DomainRouter;
 use Lilly\Http\Request;
 use Lilly\Http\Response;
@@ -38,5 +39,25 @@ return function (DomainRouter $router): void {
         $result = $service->handle(new ListUsersQuery($name, $limit));
 
         return Response::json($result->items);
+    });
+
+    $router->get('/users/faulty/validation', function (Request $request): Response {
+        $orm = $request->attribute('orm');
+        $repository = new UsersCommandRepository($orm);
+        $service = new CreateUserService($repository);
+
+        $service->handle(new CreateUserData(''));
+
+        return Response::json(['ok' => false]);
+    });
+
+    $router->get('/users/faulty/dto', function (Request $request): Response {
+        $orm = $request->attribute('orm');
+        $repository = new UsersCommandRepository($orm);
+        $service = new CreateUserService($repository);
+
+        $service->handle(new readonly class implements CommandDataDto {});
+
+        return Response::json(['ok' => false]);
     });
 };
