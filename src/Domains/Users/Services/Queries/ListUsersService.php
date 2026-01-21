@@ -8,6 +8,7 @@ use Domains\Users\Repositories\UsersQueryRepository;
 use Lilly\Dto\QueryDto;
 use Lilly\Dto\ResultDto;
 use Lilly\Services\QueryService;
+use Lilly\Validation\ArrayValidator;
 
 readonly class ListUsersQuery implements QueryDto
 {
@@ -20,11 +21,35 @@ readonly class ListUsersQuery implements QueryDto
 readonly class ListUsersResult implements ResultDto
 {
     /**
-     * @param list<array{id:int, name:string, created_at:string, updated_at:string}> $items
+     * @param list<Users> $items
      */
-    public function __construct(
-        public array $items = []
-    ) {}
+    public function __construct(array $items = [])
+    {
+        $this->items = ArrayValidator::mapListWithSchema($items, [
+            'id' => [
+                'value' => 'id',
+                'rules' => ['required', 'int'],
+            ],
+            'name' => [
+                'value' => 'name',
+                'rules' => ['required', 'string', 'max:255'],
+            ],
+            'created_at' => [
+                'value' => 'createdAt',
+                'rules' => ['required', 'string'],
+            ],
+            'updated_at' => [
+                'value' => 'updatedAt',
+                'rules' => ['required', 'string'],
+            ],
+        ]);
+    }
+
+    /**
+     * @var list<array{id:int, name:string, created_at:string, updated_at:string}>
+     */
+    public array $items;
+
 }
 
 final class ListUsersService extends QueryService
@@ -40,15 +65,7 @@ final class ListUsersService extends QueryService
         $items = $this->users->listDummy($query->limit + $query->offset);
         $items = array_slice($items, $query->offset, $query->limit);
 
-        return new ListUsersResult(array_map(
-            static fn (Users $user): array => [
-                'id' => $user->id ?? 0,
-                'name' => $user->name,
-                'created_at' => $user->createdAt ?? '',
-                'updated_at' => $user->updatedAt ?? '',
-            ],
-            $items
-        ));
+        return new ListUsersResult($items);
     }
 
     protected function expectedQueryClass(): ?string
