@@ -13,16 +13,20 @@ use Lilly\Validation\ArrayValidator;
 readonly class ListUsersQuery implements QueryDto
 {
     public string $name;
+    public int $limit;
 
-    public function __construct(string $name)
+    public function __construct(string $name, int $limit)
     {
         $data = ArrayValidator::map(
-            ['name' => $name],
-            ['name' => ['required', 'string', 'max:255', 'non_empty']],
-            ['name' => static fn (mixed $value): string => trim((string) $value)]
+            ['name' => $name, 'limit' => $limit],
+            [
+                'name' => ['required', 'string', 'max:255', 'non_empty'],
+                'limit' => ['required', 'int'],
+            ]
         );
 
         $this->name = $data['name'];
+        $this->limit = $data['limit'];
     }
 }
 
@@ -76,6 +80,8 @@ final class ListUsersService extends QueryService
             $items,
             static fn (Users $user): bool => strtolower($user->name) === $needle
         ));
+        $limit = max(0, $query->limit);
+        $items = array_slice($items, 0, $limit);
 
         return new ListUsersResult($items);
     }
