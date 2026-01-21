@@ -494,6 +494,80 @@ Characteristics:
 
 ---
 
+## Query service structure (generated)
+
+Generated query services live in a single file that holds the query DTO, result DTO, and service class. This keeps the read intent, validation, and execution co-located.
+
+```
+namespace Domains/<Domain>/Services/Queries;
+
+use Lilly\Dto\QueryDto;
+use Lilly\Dto\ResultDto;
+use Lilly\Services\QueryService;
+use Lilly\Validation\ArrayValidator;
+
+readonly class <Name>Query implements QueryDto
+{
+    public function __construct(/* inputs */)
+    {
+        $data = ArrayValidator::map(
+            [
+                // input mapping
+            ],
+            [
+                // query validation rules
+            ]
+        );
+
+        // assign validated data
+    }
+}
+
+readonly class <Name>Result implements ResultDto
+{
+    /**
+     * @param list<mixed> $items
+     */
+    public function __construct(array $items = [])
+    {
+        $this->items = ArrayValidator::mapListWithSchema($items, [
+            // result item schema + validation rules
+        ]);
+    }
+
+    /**
+     * @var list<array<string, mixed>>
+     */
+    public array $items;
+}
+
+final class <Name>Service extends QueryService
+{
+    protected function execute(QueryDto $query): ResultDto
+    {
+        return new <Name>Result();
+    }
+}
+```
+
+### Query DTO validation
+
+* Validation rules live inside the query DTO constructor.
+* `ArrayValidator::map()` is used to:
+  * enforce required fields
+  * validate types and constraints
+  * normalize values before assignment
+
+### Result DTO validation
+
+* Result data is validated in the result DTO constructor.
+* `ArrayValidator::mapListWithSchema()` is used to:
+  * shape each item
+  * validate field rules
+  * enforce stable output structure
+
+---
+
 ## Action Input DTO (`*Input.php`)
 
 Location:
