@@ -20,13 +20,13 @@ final class UsersQueryRepository extends QueryRepository
     public function listDummy(?int $limit = null): array
     {
         $names = [
-            'Ada Lovelace',
-            'Grace Hopper',
-            'Alan Turing',
-            'Katherine Johnson',
-            'Edsger Dijkstra',
-            'Linus Torvalds',
-            'Leslie Lamport',
+            'AdaLovelace',
+            'GraceHopper',
+            'AlanTuring',
+            'KatherineJohnson',
+            'EdsgerDijkstra',
+            'LinusTorvalds',
+            'LeslieLamport',
         ];
 
         if ($limit !== null) {
