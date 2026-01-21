@@ -8,7 +8,6 @@ use Domains\Users\Repositories\UsersQueryRepository;
 use Lilly\Dto\QueryDto;
 use Lilly\Dto\ResultDto;
 use Lilly\Services\QueryService;
-use InvalidArgumentException;
 
 readonly class ListUsersQuery implements QueryDto
 {
@@ -24,8 +23,8 @@ readonly class ListUsersResult implements ResultDto
      * @param list<array{id:int, name:string, created_at:string, updated_at:string}> $items
      */
     public function __construct(
-        public array $items
-    ){}
+        public array $items = []
+    ) {}
 }
 
 final class ListUsersService extends QueryService
@@ -34,22 +33,9 @@ final class ListUsersService extends QueryService
         private readonly UsersQueryRepository $users,
     ) {}
 
-    /**
-     * @return list<array{id:int, name:string, created_at:string, updated_at:string}>
-     */
-    public function list(
-        ListUsersQuery $query = new ListUsersQuery()
-    ): array
-    {
-        $result = $this->handle($query);
-        return $result->items;
-    }
-
     protected function execute(QueryDto $query): ResultDto
     {
-        if (!$query instanceof ListUsersQuery) {
-            throw new InvalidArgumentException('Expected ' . ListUsersQuery::class);
-        }
+        /** @var ListUsersQuery $query */
 
         $items = $this->users->listDummy($query->limit + $query->offset);
         $items = array_slice($items, $query->offset, $query->limit);
@@ -63,5 +49,15 @@ final class ListUsersService extends QueryService
             ],
             $items
         ));
+    }
+
+    protected function expectedQueryClass(): ?string
+    {
+        return ListUsersQuery::class;
+    }
+
+    protected function expectedResultClass(): ?string
+    {
+        return ListUsersResult::class;
     }
 }
