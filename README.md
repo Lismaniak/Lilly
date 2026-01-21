@@ -233,6 +233,78 @@ This enables mechanical enforcement and a consistent mental model.
 
 ---
 
+## Command service base class
+
+All command services extend `Lilly\Services\CommandService`.
+
+Behavior:
+
+* `handle()` validates the DTO types before and after execution.
+* `execute()` contains the mutation logic and returns a `ResultDto`.
+* Optional guards (`expectedDataClass()` and `expectedResultClass()`) enforce concrete DTO types and throw when mismatched.
+
+Example:
+
+```
+readonly class CreateUserData implements CommandDataDto
+{
+    public function __construct(public string $name)
+    {
+        $data = ArrayValidator::map(
+            ['name' => $name],
+            ['name' => ['required', 'string', 'max:255', 'non_empty']]
+        );
+
+        $this->name = $data['name'];
+    }
+}
+
+readonly class CreateUserResult implements ResultDto
+{
+    public function __construct(
+        public int $id,
+        public string $name,
+        public string $createdAt,
+        public string $updatedAt
+    ) {
+        ArrayValidator::map(
+            [
+                'id' => $id,
+                'name' => $name,
+                'created_at' => $createdAt,
+                'updated_at' => $updatedAt,
+            ],
+            [
+                'id' => ['required', 'int'],
+                'name' => ['required', 'string', 'max:255'],
+                'created_at' => ['required', 'string'],
+                'updated_at' => ['required', 'string'],
+            ]
+        );
+    }
+}
+
+final class CreateUserService extends CommandService
+{
+    protected function execute(CommandDataDto $data): ResultDto
+    {
+        // mutation logic
+    }
+
+    protected function expectedDataClass(): ?string
+    {
+        return CreateUserData::class;
+    }
+
+    protected function expectedResultClass(): ?string
+    {
+        return CreateUserResult::class;
+    }
+}
+```
+
+---
+
 ## Migrations
 
 ```
@@ -388,13 +460,9 @@ Domains/Users/Validators/
 Domains/Users/Services/
   Commands/
     CreateUserService.php
-    CreateUserData.php
-    CreateUserResult.php
 
   Queries/
     GetUserProfileService.php
-    GetUserProfileQuery.php
-    GetUserProfileResult.php
 ```
 
 ### Service rules
@@ -415,6 +483,8 @@ Domains/Users/Services/
 
 Authorization is enforced before services run.
 
+Command service files define the command data and result DTOs alongside the service class.
+
 ---
 
 ## DTO conventions (mandatory)
@@ -427,9 +497,9 @@ DTOs are used everywhere to enforce boundaries and intent.
 | -------------- | --------------------------------- | ----------------- |
 | Props          | `Components/*/Props.php`          | GET configuration |
 | Action Input   | `Components/*/Actions/*Input.php` | POST body         |
-| Service Data   | `Domains/*/Services/*Data.php`    | Command input     |
-| Service Query  | `Domains/*/Services/*Query.php`   | Read intent       |
-| Service Result | `Domains/*/Services/*Result.php`  | Service output    |
+| Service Data   | `Domains/*/Services/Commands/*Service.php` | Command input     |
+| Service Query  | `Domains/*/Services/Queries/*Service.php`  | Read intent       |
+| Service Result | `Domains/*/Services/Commands/*Service.php` and `Domains/*/Services/Queries/*Service.php` | Service output    |
 
 ### DTO rules
 
@@ -456,12 +526,12 @@ This separation enforces boundaries and prevents accidental coupling.
 
 ---
 
-## Command Data DTO (`*Data.php`)
+## Command Data DTO (`*Data`)
 
 Location:
 
 ```
-Domains/*/Services/Commands/*Data.php
+Domains/*/Services/Commands/*Service.php
 ```
 
 Purpose: represents an intent to change state.
@@ -471,16 +541,16 @@ Characteristics:
 * Causes side effects
 * Used only by command services
 * May fail due to business rules
-* Usually returns a `*Result.php`
+* Usually returns a `*Result` DTO defined in the same file
 
 ---
 
-## Query DTO (`*Query.php`)
+## Query DTO (`*Query`)
 
 Location:
 
 ```
-Domains/*/Services/Queries/*Query.php
+Domains/*/Services/Queries/*Service.php
 ```
 
 Purpose: represents an intent to read state.
