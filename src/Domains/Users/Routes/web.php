@@ -2,6 +2,10 @@
 declare(strict_types=1);
 
 use Domains\Users\Repositories\UsersQueryRepository;
+use Domains\Users\Services\Queries\BrokenNonReadonlyQueryService;
+use Domains\Users\Services\Queries\BrokenNonReadonlyResultService;
+use Domains\Users\Services\Queries\BrokenWrongSuffixQueryService;
+use Domains\Users\Services\Queries\BrokenWrongSuffixResultService;
 use Domains\Users\Services\Queries\ListUsersService;
 use Lilly\Http\DomainRouter;
 use Lilly\Http\Request;
@@ -16,5 +20,33 @@ return function (DomainRouter $router): void {
         $service = new ListUsersService($repository);
 
         return Response::json($service->list());
+    });
+
+    $router->get('/users/broken/non-readonly-query', function (): Response {
+        $service = new BrokenNonReadonlyQueryService();
+        $service->run();
+
+        return Response::json(['ok' => true]);
+    });
+
+    $router->get('/users/broken/wrong-suffix-query', function (): Response {
+        $service = new BrokenWrongSuffixQueryService();
+        $service->run();
+
+        return Response::json(['ok' => true]);
+    });
+
+    $router->get('/users/broken/non-readonly-result', function (): Response {
+        $service = new BrokenNonReadonlyResultService();
+        $service->run();
+
+        return Response::json(['ok' => true]);
+    });
+
+    $router->get('/users/broken/wrong-suffix-result', function (): Response {
+        $service = new BrokenWrongSuffixResultService();
+        $service->run();
+
+        return Response::json(['ok' => true]);
     });
 };
