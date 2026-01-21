@@ -35,6 +35,27 @@ final class ArrayValidator
         );
     }
 
+    /**
+     * @param array<string, mixed> $data
+     * @param array<string, list<string|callable>> $rules
+     * @param array<string, callable> $normalizers
+     * @return array<string, mixed>
+     */
+    public static function map(array $data, array $rules, array $normalizers = []): array
+    {
+        foreach ($normalizers as $field => $normalizer) {
+            if (!array_key_exists($field, $data)) {
+                continue;
+            }
+
+            $data[$field] = $normalizer($data[$field]);
+        }
+
+        self::validate($data, $rules);
+
+        return $data;
+    }
+
     private static function resolveValue(mixed $item, callable|string $value): mixed
     {
         if (is_callable($value)) {
@@ -134,6 +155,10 @@ final class ArrayValidator
                     if (is_string($value) && $prefix !== '' && !str_starts_with($value, $prefix)) {
                         throw new InvalidArgumentException("Field '{$field}' must start with '{$prefix}'.");
                     }
+                }
+
+                if ($rule === 'non_empty' && is_string($value) && $value === '') {
+                    throw new InvalidArgumentException("Field '{$field}' must not be empty.");
                 }
             }
         }
