@@ -15,11 +15,12 @@ use Lilly\Http\Response;
 return function (DomainRouter $router): void {
     $router->get('/users/health', fn (): Response => Response::json(['ok' => true]));
 
-    $router->get('/users/dummy', function (Request $request): Response {
+    $router->get('/users/{name}', function (Request $request): Response {
         $orm = $request->attribute('orm');
+        $name = (string) $request->attribute('name', '');
         $repository = new UsersQueryRepository($orm);
         $service = new ListUsersService($repository);
-        $result = $service->handle(new ListUsersQuery());
+        $result = $service->handle(new ListUsersQuery($name));
 
         return Response::json($result->items);
     });
