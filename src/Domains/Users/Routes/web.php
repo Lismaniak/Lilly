@@ -6,6 +6,7 @@ use Domains\Users\Services\Queries\BrokenNonReadonlyQueryService;
 use Domains\Users\Services\Queries\BrokenNonReadonlyResultService;
 use Domains\Users\Services\Queries\BrokenWrongSuffixQueryService;
 use Domains\Users\Services\Queries\BrokenWrongSuffixResultService;
+use Domains\Users\Services\Queries\ListUsersQuery;
 use Domains\Users\Services\Queries\ListUsersService;
 use Lilly\Http\DomainRouter;
 use Lilly\Http\Request;
@@ -18,8 +19,9 @@ return function (DomainRouter $router): void {
         $orm = $request->attribute('orm');
         $repository = new UsersQueryRepository($orm);
         $service = new ListUsersService($repository);
+        $result = $service->handle(new ListUsersQuery());
 
-        return Response::json($service->list());
+        return Response::json($result->items);
     });
 
     $router->get('/users/broken/non-readonly-query', function (): Response {
