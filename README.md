@@ -1,5 +1,64 @@
 # Lilly Framework – Architecture and Conventions
 
+Lilly is an opinionated PHP 8.3+ framework that enforces a consistent, domain-driven structure for every application built on it. It ships with a CLI for scaffolding and schema syncing, favors explicit boundaries, and keeps read/write paths separated by design.
+
+---
+
+## Quick start
+
+### Requirements
+
+* PHP 8.3+
+* Composer
+* A database (SQLite by default, MySQL via Docker)
+
+### Local setup (SQLite)
+
+```
+cp .env.example .env
+composer install
+php -S 0.0.0.0:8000 -t public
+```
+
+The example `.env` config uses SQLite at `var/lilly.sqlite`. Update values as needed.
+
+### Local setup (Docker + MySQL)
+
+```
+cp .env.example .env
+docker compose up --build
+```
+
+This starts:
+
+* PHP at http://localhost:8000
+* MySQL at localhost:3306 with the credentials in `docker-compose.yml`
+
+For Docker, set your `.env` to the MySQL configuration:
+
+```
+APP_ENV=local
+APP_DEBUG=1
+
+DB_CONNECTION=mysql
+DB_DATABASE=lilly
+DB_SANDBOX_DATABASE=lilly_sandbox
+DB_HOST=mysql
+DB_PORT=3306
+DB_USERNAME=lilly
+DB_PASSWORD=lilly
+```
+
+### CLI usage
+
+Use the bundled CLI for scaffolding and schema sync:
+
+```
+php lilly-cli list
+```
+
+---
+
 This document defines the enforced folder structure, component model, repository discipline, routing conventions, and security flow used in Lilly.
 
 The goal of Lilly is architectural uniformity:
