@@ -21,7 +21,12 @@ return function (DomainRouter $router): void {
         $service = new CreateUserService($repository);
         $result = $service->handle(new CreateUserData($name));
 
-        return Response::json($result);
+        return Response::json([
+            'id' => $result->id,
+            'name' => $result->name,
+            'created_at' => $result->createdAt,
+            'updated_at' => $result->updatedAt,
+        ]);
     });
 
     $router->get('/users/{name}/{limit}', function (Request $request): Response {
