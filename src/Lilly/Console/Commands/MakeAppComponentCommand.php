@@ -43,7 +43,6 @@ final class MakeAppComponentCommand extends Command
             '',
             'Routes',
             'Actions',
-            'View',
             'Assets',
             'Tests',
         ];
@@ -62,7 +61,6 @@ final class MakeAppComponentCommand extends Command
         $this->write("{$root}/Actions/{$name}.php", $this->actionStub($name), $output);
         $this->write("{$root}/Actions/{$name}Input.php", $this->inputStub($name), $output);
 
-        $this->write("{$root}/View/view.php", "<!-- {$name} view -->\n", $output);
         $this->write("{$root}/Assets/component.ts", "// {$name} hydration\n", $output);
         $this->write("{$root}/Assets/component.css", "/* {$name} styles */\n", $output);
 
