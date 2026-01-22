@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Domains\Users\Controllers;
 
+use Domains\Users\Components\AddUserForm\AddUserFormInput;
 use Domains\Users\Services\Commands\CreateUserData;
 use Domains\Users\Services\Commands\CreateUserResult;
 use Domains\Users\Services\Commands\CreateUserService;
@@ -24,11 +25,11 @@ final class UsersController
     public function create(Request $request): ResultDto
     {
         $orm = $request->attribute('orm');
-        $name = (string) $request->input('name', $request->attribute('name', ''));
+        $input = new AddUserFormInput((string) $request->input('name', $request->attribute('name', '')));
         $repository = new UsersCommandRepository($orm);
         $service = new CreateUserService($repository);
 
-        return $service->handle(new CreateUserData($name));
+        return $service->handle(new CreateUserData($input->name));
     }
 
     public function createResponse(Request $request): Response
