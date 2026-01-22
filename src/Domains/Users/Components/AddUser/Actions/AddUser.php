@@ -32,6 +32,13 @@ final class AddUser
         $repository = new UsersCommandRepository($orm);
         $service = new CreateUserService($repository);
 
-        return $service->handle(new CreateUserData($input->name));
+        $result = $service->handle(new CreateUserData($input->name));
+
+        if (!$result instanceof CreateUserResult) {
+            $actual = $result::class;
+            throw new \UnexpectedValueException("Expected result " . CreateUserResult::class . ", got {$actual}.");
+        }
+
+        return $result;
     }
 }
