@@ -10,6 +10,6 @@ return function (DomainRouter $router): void {
     $controller = new UsersController();
 
     $router->get('/users/health', fn (): Response => $controller->health());
-    $router->get('/users/create/{name}', fn (Request $request): Response => $controller->create($request));
+    $router->get('/users/create/{name}', fn (Request $request): Response => $controller->createResponse($request));
     $router->get('/users/{name}/{limit}', fn (Request $request): Response => $controller->list($request));
 };

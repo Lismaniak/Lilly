@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 namespace Domains\Users\Controllers;
 
-use Domains\Users\Repositories\UsersCommandRepository;
-use Domains\Users\Repositories\UsersQueryRepository;
 use Domains\Users\Services\Commands\CreateUserData;
+use Domains\Users\Services\Commands\CreateUserResult;
 use Domains\Users\Services\Commands\CreateUserService;
 use Domains\Users\Services\Queries\ListUsersQuery;
 use Domains\Users\Services\Queries\ListUsersService;
+use Domains\Users\Repositories\UsersCommandRepository;
+use Domains\Users\Repositories\UsersQueryRepository;
 use Lilly\Http\Request;
 use Lilly\Http\Response;
 
@@ -19,13 +20,19 @@ final class UsersController
         return Response::json(['ok' => true]);
     }
 
-    public function create(Request $request): Response
+    public function create(Request $request): CreateUserResult
     {
         $orm = $request->attribute('orm');
-        $name = (string) $request->attribute('name', '');
+        $name = (string) $request->input('name', $request->attribute('name', ''));
         $repository = new UsersCommandRepository($orm);
         $service = new CreateUserService($repository);
-        $result = $service->handle(new CreateUserData($name));
+
+        return $service->handle(new CreateUserData($name));
+    }
+
+    public function createResponse(Request $request): Response
+    {
+        $result = $this->create($request);
 
         return Response::json([
             'id' => $result->id,

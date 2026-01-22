@@ -1,9 +1,8 @@
 <?php
 declare(strict_types=1);
 
-use Domains\Users\Components\AddUser\Actions\AddUser;
-use Domains\Users\Components\AddUser\Actions\AddUserInput;
 use Domains\Users\Components\AddUser\Props;
+use Domains\Users\Controllers\UsersController;
 use Lilly\Http\DomainRouter;
 use Lilly\Http\Request;
 use Lilly\Http\Response;
@@ -25,10 +24,8 @@ return function (DomainRouter $router): void {
     });
 
     $router->post($actionPath, function (Request $request) use ($render, $viewPath, $actionPath): Response {
-        $orm = $request->attribute('orm');
-        $input = new AddUserInput((string) $request->input('name', ''));
-        $action = new AddUser();
-        $result = $action->handle($orm, $input);
+        $controller = new UsersController();
+        $result = $controller->create($request);
 
         $notice = sprintf('Created user #%d (%s).', $result->id, $result->name);
         $html = $render($viewPath, new Props(actionPath: $actionPath, notice: $notice));
