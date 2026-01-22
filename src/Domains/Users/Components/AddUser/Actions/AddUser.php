@@ -5,6 +5,7 @@ namespace Domains\Users\Components\AddUser\Actions;
 
 use Domains\Users\Repositories\UsersCommandRepository;
 use Domains\Users\Services\Commands\CreateUserData;
+use Domains\Users\Services\Commands\CreateUserResult;
 use Domains\Users\Services\Commands\CreateUserService;
 use Lilly\Database\Orm\Orm;
 use Lilly\Dto\ResultDto;
