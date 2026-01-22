@@ -223,11 +223,11 @@ final class DbSyncApplyCommand extends Command
         }
 
         if ($connection === 'mysql') {
-            $host = $this->config->dbHost;
+            $host = $this->env('DB_CLI_HOST') ?: $this->config->dbHost;
             $port = $this->config->dbPort ?? 3306;
             $user = $this->config->dbUsername;
             $pass = $this->config->dbPassword ?? '';
-            $sandboxHost = $this->config->dbSandboxHost ?: $host;
+            $sandboxHost = $this->env('DB_CLI_SANDBOX_HOST') ?: ($this->config->dbSandboxHost ?: $host);
 
             if ($host === null || $host === '') {
                 throw new RuntimeException('DB_HOST is required for mysql');
@@ -236,7 +236,8 @@ final class DbSyncApplyCommand extends Command
                 throw new RuntimeException('DB_USERNAME is required for mysql');
             }
 
-            if (gethostbyname($sandboxHost) === $sandboxHost) {
+            $sandboxIsIp = filter_var($sandboxHost, FILTER_VALIDATE_IP) !== false;
+            if (!$sandboxIsIp && gethostbyname($sandboxHost) === $sandboxHost) {
                 throw new RuntimeException(
                     "DB_SANDBOX_HOST '{$sandboxHost}' could not be resolved. If you're running the CLI on the host machine, " .
                     "use DB_SANDBOX_HOST=127.0.0.1 (or set DB_HOST to 127.0.0.1). If you're running inside Docker, " .
