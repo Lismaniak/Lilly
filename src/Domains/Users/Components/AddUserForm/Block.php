@@ -1,14 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Domains\Users\Blocks;
+namespace Domains\Users\Components\AddUserForm;
 
-use Domains\Users\Components\AddUserForm\Component;
-use Domains\Users\Components\AddUserForm\Props;
 use Lilly\Block\BaseBlock;
 use Lilly\Block\LayoutConstraints;
 
-final class AddUserFormBlock extends BaseBlock
+final class Block extends BaseBlock
 {
     public function __construct(
         private readonly Props $props

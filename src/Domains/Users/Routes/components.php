@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-use Domains\Users\Blocks\AddUserFormBlock;
+use Domains\Users\Components\AddUserForm\Block;
 use Domains\Users\Components\AddUserForm\Props;
 use Domains\Users\Controllers\UsersController;
 use Lilly\Http\DomainRouter;
@@ -10,7 +10,7 @@ use Lilly\Http\Response;
 
 return function (DomainRouter $router): void {
     $render = static function (Props $props): string {
-        $block = new AddUserFormBlock($props);
+        $block = new Block($props);
         return $block->renderHtml();
     };
 

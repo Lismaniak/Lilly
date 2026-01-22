@@ -775,6 +775,7 @@ Rules:
 * Must touch exactly one domain
 * Domain inferred from folder location
 * Domain policy enforced automatically
+* Non-base blocks must live inside the component folder (base blocks like `HtmlBlock`, `HeadBlock`, and `BodyBlock` remain in `App/Blocks`)
 
 Component ID convention:
 
