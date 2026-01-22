@@ -5,6 +5,7 @@ namespace Lilly\Console\Commands;
 
 use Lilly\Config\Config;
 use Lilly\Database\ConnectionFactory;
+use Lilly\Database\Schema\Blueprint;
 use Lilly\Database\SchemaSync\SchemaSync;
 use PDO;
 use RuntimeException;
@@ -151,6 +152,8 @@ final class DbSyncApplyCommand extends Command
             if (!$result->ok) {
                 return Command::FAILURE;
             }
+
+            $this->syncEntitiesFromBlueprints($domain, $output, $verbose);
         }
 
         return Command::SUCCESS;
@@ -224,6 +227,7 @@ final class DbSyncApplyCommand extends Command
             $port = $this->config->dbPort ?? 3306;
             $user = $this->config->dbUsername;
             $pass = $this->config->dbPassword ?? '';
+            $sandboxHost = $this->config->dbSandboxHost ?: $host;
 
             if ($host === null || $host === '') {
                 throw new RuntimeException('DB_HOST is required for mysql');
@@ -232,12 +236,20 @@ final class DbSyncApplyCommand extends Command
                 throw new RuntimeException('DB_USERNAME is required for mysql');
             }
 
+            if (gethostbyname($sandboxHost) === $sandboxHost) {
+                throw new RuntimeException(
+                    "DB_SANDBOX_HOST '{$sandboxHost}' could not be resolved. If you're running the CLI on the host machine, " .
+                    "use DB_SANDBOX_HOST=127.0.0.1 (or set DB_HOST to 127.0.0.1). If you're running inside Docker, " .
+                    'ensure the mysql container is on the same Docker network.'
+                );
+            }
+
             $sandboxDb = $this->env('DB_SANDBOX_DATABASE');
             if ($sandboxDb === '') {
                 throw new RuntimeException('DB_SANDBOX_DATABASE is required for mysql sandbox');
             }
 
-            $dsnSandbox = "mysql:host={$host};port={$port};dbname={$sandboxDb};charset=utf8mb4";
+            $dsnSandbox = "mysql:host={$sandboxHost};port={$port};dbname={$sandboxDb};charset=utf8mb4";
             $pdoSandbox = new PDO($dsnSandbox, $user, $pass, $this->pdoOptions());
 
             $this->wipeMysqlSchema($pdoSandbox);
@@ -521,5 +533,171 @@ final class DbSyncApplyCommand extends Command
     private function rel(string $abs): string
     {
         return ltrim(str_replace($this->projectRoot, '', $abs), '/');
+    }
+
+    private function syncEntitiesFromBlueprints(string $domain, OutputInterface $output, bool $verbose): void
+    {
+        $tablesDir = "{$this->projectRoot}/src/Domains/{$domain}/Database/Tables";
+        if (!is_dir($tablesDir)) {
+            return;
+        }
+
+        $entityDir = "{$this->projectRoot}/src/Domains/{$domain}/Entities";
+        if (!is_dir($entityDir)) {
+            mkdir($entityDir, 0777, true);
+        }
+
+        $blueprintFiles = glob($tablesDir . '/*.php') ?: [];
+        sort($blueprintFiles);
+
+        foreach ($blueprintFiles as $path) {
+            $base = basename($path, '.php');
+            $class = "Domains\\{$domain}\\Database\\Tables\\{$base}";
+
+            if (!class_exists($class)) {
+                require_once $path;
+            }
+
+            if (!class_exists($class) || !method_exists($class, 'name') || !method_exists($class, 'define')) {
+                continue;
+            }
+
+            $entityClass = $this->entityClassFromBlueprint($base);
+            if ($entityClass === '') {
+                continue;
+            }
+
+            $tableName = (string) $class::name();
+            $blueprint = new Blueprint($tableName, 'create');
+            $class::define($blueprint);
+
+            $entityPath = "{$entityDir}/{$entityClass}.php";
+            $contents = $this->renderEntityFromBlueprint($domain, $entityClass, $tableName, $blueprint);
+            file_put_contents($entityPath, $contents);
+
+            if ($verbose) {
+                $output->writeln(' + entity ' . $this->rel($entityPath));
+            }
+        }
+    }
+
+    private function entityClassFromBlueprint(string $blueprintClass): string
+    {
+        if (!str_ends_with($blueprintClass, 'Table')) {
+            return '';
+        }
+
+        return substr($blueprintClass, 0, -5);
+    }
+
+    private function renderEntityFromBlueprint(
+        string $domain,
+        string $entityClass,
+        string $tableName,
+        Blueprint $blueprint
+    ): string {
+        $lines = [];
+        $lines[] = '<?php';
+        $lines[] = 'declare(strict_types=1);';
+        $lines[] = '';
+        $lines[] = "namespace Domains\\{$domain}\\Entities;";
+        $lines[] = '';
+        $lines[] = 'use Lilly\\Database\\Orm\\Attributes\\Table;';
+        $lines[] = 'use Lilly\\Database\\Orm\\Attributes\\Column;';
+        $lines[] = '';
+        $lines[] = "#[Table('{$tableName}')]";
+        $lines[] = "final class {$entityClass}";
+        $lines[] = '{';
+
+        foreach ($blueprint->columns() as $column) {
+            $property = $this->columnToProperty($column->name);
+            $typeInfo = $this->columnTypeInfo($column->type, $column->nullable, $column->primary, $column->autoIncrement);
+            $attr = $this->columnAttribute($column->name, $column->primary, $column->autoIncrement, $column->nullable);
+            $lines[] = "    {$attr}";
+            $lines[] = "    public {$typeInfo['type']} \${$property} = {$typeInfo['default']};";
+            $lines[] = '';
+        }
+
+        if ($lines[count($lines) - 1] === '') {
+            array_pop($lines);
+        }
+
+        $lines[] = '}';
+        $lines[] = '';
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @return array{type: string, default: string}
+     */
+    private function columnTypeInfo(string $type, bool $nullable, bool $primary, bool $autoIncrement): array
+    {
+        $base = $this->columnBaseType($type);
+
+        if ($primary && $autoIncrement) {
+            return ['type' => '?int', 'default' => 'null'];
+        }
+
+        if ($nullable) {
+            return ['type' => '?' . $base, 'default' => 'null'];
+        }
+
+        return match ($base) {
+            'int' => ['type' => 'int', 'default' => '0'],
+            'bool' => ['type' => 'bool', 'default' => 'false'],
+            default => ['type' => $base, 'default' => "''"],
+        };
+    }
+
+    private function columnBaseType(string $type): string
+    {
+        $normalized = strtolower($type);
+
+        if (str_starts_with($normalized, 'string:')) {
+            return 'string';
+        }
+
+        return match ($normalized) {
+            'id', 'int', 'bigint', 'ubigint' => 'int',
+            'bool' => 'bool',
+            default => 'string',
+        };
+    }
+
+    private function columnAttribute(string $name, bool $primary, bool $autoIncrement, bool $nullable): string
+    {
+        $parts = ["'{$name}'"];
+
+        if ($primary) {
+            $parts[] = 'primary: true';
+        }
+        if ($autoIncrement) {
+            $parts[] = 'autoIncrement: true';
+        }
+        if ($nullable) {
+            $parts[] = 'nullable: true';
+        }
+
+        return '#[Column(' . implode(', ', $parts) . ')]';
+    }
+
+    private function columnToProperty(string $column): string
+    {
+        $column = strtolower($column);
+        $parts = preg_split('/_+/', $column) ?: [];
+        $property = '';
+        foreach ($parts as $index => $part) {
+            if ($part === '') {
+                continue;
+            }
+            if ($index === 0) {
+                $property .= $part;
+                continue;
+            }
+            $property .= ucfirst($part);
+        }
+
+        return $property !== '' ? $property : $column;
     }
 }
