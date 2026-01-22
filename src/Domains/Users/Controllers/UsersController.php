@@ -10,6 +10,7 @@ use Domains\Users\Services\Queries\ListUsersQuery;
 use Domains\Users\Services\Queries\ListUsersService;
 use Domains\Users\Repositories\UsersCommandRepository;
 use Domains\Users\Repositories\UsersQueryRepository;
+use Lilly\Dto\ResultDto;
 use Lilly\Http\Request;
 use Lilly\Http\Response;
 
@@ -20,7 +21,7 @@ final class UsersController
         return Response::json(['ok' => true]);
     }
 
-    public function create(Request $request): CreateUserResult
+    public function create(Request $request): ResultDto
     {
         $orm = $request->attribute('orm');
         $name = (string) $request->input('name', $request->attribute('name', ''));
