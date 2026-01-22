@@ -1,0 +1,18 @@
+<section class="users-add-user-form">
+    <header class="users-add-user-form__header">
+        <h2>Add User</h2>
+        <p>Create a new user record for this domain.</p>
+    </header>
+
+    {{#if notice}}
+    <div class="users-add-user-form__notice">
+        {{ notice }}
+    </div>
+    {{/if}}
+
+    <form class="users-add-user-form__form" method="post" action="{{ actionPath }}">
+        <label class="users-add-user-form__label" for="users-add-user-form-name">Name</label>
+        <input class="users-add-user-form__input" id="users-add-user-form-name" name="name" type="text" placeholder="Ada Lovelace" required />
+        <button class="users-add-user-form__button" type="submit">Create user</button>
+    </form>
+</section>
