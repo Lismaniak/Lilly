@@ -227,6 +227,7 @@ final class DbSyncApplyCommand extends Command
             $port = $this->config->dbPort ?? 3306;
             $user = $this->config->dbUsername;
             $pass = $this->config->dbPassword ?? '';
+            $sandboxHost = $this->config->dbSandboxHost ?: $host;
 
             if ($host === null || $host === '') {
                 throw new RuntimeException('DB_HOST is required for mysql');
@@ -235,12 +236,20 @@ final class DbSyncApplyCommand extends Command
                 throw new RuntimeException('DB_USERNAME is required for mysql');
             }
 
+            if (gethostbyname($sandboxHost) === $sandboxHost) {
+                throw new RuntimeException(
+                    "DB_SANDBOX_HOST '{$sandboxHost}' could not be resolved. If you're running the CLI on the host machine, " .
+                    "use DB_SANDBOX_HOST=127.0.0.1 (or set DB_HOST to 127.0.0.1). If you're running inside Docker, " .
+                    'ensure the mysql container is on the same Docker network.'
+                );
+            }
+
             $sandboxDb = $this->env('DB_SANDBOX_DATABASE');
             if ($sandboxDb === '') {
                 throw new RuntimeException('DB_SANDBOX_DATABASE is required for mysql sandbox');
             }
 
-            $dsnSandbox = "mysql:host={$host};port={$port};dbname={$sandboxDb};charset=utf8mb4";
+            $dsnSandbox = "mysql:host={$sandboxHost};port={$port};dbname={$sandboxDb};charset=utf8mb4";
             $pdoSandbox = new PDO($dsnSandbox, $user, $pass, $this->pdoOptions());
 
             $this->wipeMysqlSchema($pdoSandbox);
