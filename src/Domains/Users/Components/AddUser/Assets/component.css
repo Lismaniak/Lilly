@@ -1,0 +1,46 @@
+.users-add-user {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 420px;
+    background: #fff;
+}
+
+.users-add-user__header {
+    margin-bottom: 1rem;
+}
+
+.users-add-user__notice {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: #eff6ff;
+    border-radius: 8px;
+    color: #1e3a8a;
+}
+
+.users-add-user__form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.users-add-user__label {
+    font-weight: 600;
+}
+
+.users-add-user__input {
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #cbd5f5;
+}
+
+.users-add-user__button {
+    align-self: flex-start;
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    border: none;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
