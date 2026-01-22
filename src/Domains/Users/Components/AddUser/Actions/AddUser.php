@@ -5,7 +5,6 @@ namespace Domains\Users\Components\AddUser\Actions;
 
 use Domains\Users\Repositories\UsersCommandRepository;
 use Domains\Users\Services\Commands\CreateUserData;
-use Domains\Users\Services\Commands\CreateUserResult;
 use Domains\Users\Services\Commands\CreateUserService;
 use Lilly\Database\Orm\Orm;
 use Lilly\Dto\ResultDto;
@@ -32,14 +31,8 @@ final class AddUser
     {
         $repository = new UsersCommandRepository($orm);
         $service = new CreateUserService($repository);
+        $data = new CreateUserData($input->name);
 
-        $result = $service->handle(new CreateUserData($input->name));
-
-        if (!$result instanceof CreateUserResult) {
-            $actual = $result::class;
-            throw new \UnexpectedValueException("Expected result " . CreateUserResult::class . ", got {$actual}.");
-        }
-
-        return $result;
+        return $service->handle($data->name);
     }
 }
