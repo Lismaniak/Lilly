@@ -1,0 +1,133 @@
+{
+    "domain": "Users",
+    "generated_at": "2026-01-22T12:34:00+00:00",
+    "schema_hash": "7adbb62d4385d2480e6fcb31cc2dc993dc0cc66a785663dfe1583c9c65690c3a",
+    "tables": {
+        "user_mails": {
+            "class": "Domains\\Users\\Database\\Tables\\UserMailsTable",
+            "def": {
+                "table": "user_mails",
+                "columns": [
+                    {
+                        "name": "created_at",
+                        "type": "timestamp",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "id",
+                        "type": "id",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": true,
+                        "auto_increment": true,
+                        "default": null
+                    },
+                    {
+                        "name": "testmail",
+                        "type": "string:255",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": "Yeah!!"
+                    },
+                    {
+                        "name": "testmail2",
+                        "type": "string:255",
+                        "nullable": false,
+                        "unique": true,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "testmail3",
+                        "type": "string:255",
+                        "nullable": true,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "updated_at",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "user_id",
+                        "type": "ubigint",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    }
+                ],
+                "foreign_keys": [
+                    {
+                        "column": "user_id",
+                        "references": "id",
+                        "on": "users",
+                        "onDelete": "cascade"
+                    }
+                ],
+                "was": []
+            }
+        },
+        "users": {
+            "class": "Domains\\Users\\Database\\Tables\\UsersTable",
+            "def": {
+                "table": "users",
+                "columns": [
+                    {
+                        "name": "created_at",
+                        "type": "timestamp",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "id",
+                        "type": "id",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": true,
+                        "auto_increment": true,
+                        "default": null
+                    },
+                    {
+                        "name": "name",
+                        "type": "string:255",
+                        "nullable": false,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    },
+                    {
+                        "name": "updated_at",
+                        "type": "timestamp",
+                        "nullable": true,
+                        "unique": false,
+                        "primary": false,
+                        "auto_increment": false,
+                        "default": null
+                    }
+                ],
+                "foreign_keys": [],
+                "was": []
+            }
+        }
+    }
+}

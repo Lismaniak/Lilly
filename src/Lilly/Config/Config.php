@@ -20,14 +20,19 @@ final readonly class Config
 
     public static function fromEnv(): self
     {
+
+        $isCli = PHP_SAPI === 'cli';
+        $cliHost = $isCli ? self::envNullableString('DB_CLI_HOST') : null;
+        $cliSandboxHost = $isCli ? self::envNullableString('DB_CLI_SANDBOX_HOST') : null;
+
         return new self(
             appEnv: self::envString('APP_ENV', 'production'),
             appDebug: self::envBool('APP_DEBUG', false),
 
             dbConnection: self::envString('DB_CONNECTION', 'sqlite'),
             dbDatabase: self::envString('DB_DATABASE', ''),
-            dbHost: self::envNullableString('DB_HOST'),
-            dbSandboxHost: self::envNullableString('DB_SANDBOX_HOST'),
+            dbHost: $cliHost ?? self::envNullableString('DB_HOST'),
+            dbSandboxHost: $cliSandboxHost ?? self::envNullableString('DB_SANDBOX_HOST'),
             dbPort: self::envNullableInt('DB_PORT'),
             dbUsername: self::envNullableString('DB_USERNAME'),
             dbPassword: self::envNullableString('DB_PASSWORD'),
