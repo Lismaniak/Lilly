@@ -8,6 +8,22 @@ use Domains\Users\Services\Commands\CreateUserData;
 use Domains\Users\Services\Commands\CreateUserResult;
 use Domains\Users\Services\Commands\CreateUserService;
 use Lilly\Database\Orm\Orm;
+use Lilly\Validation\ArrayValidator;
+
+final readonly class AddUserInput
+{
+    public string $name;
+
+    public function __construct(string $name)
+    {
+        $data = ArrayValidator::map(
+            ['name' => $name],
+            ['name' => ['required', 'string', 'max:255', 'non_empty']]
+        );
+
+        $this->name = $data['name'];
+    }
+}
 
 final class AddUser
 {
@@ -16,6 +32,13 @@ final class AddUser
         $repository = new UsersCommandRepository($orm);
         $service = new CreateUserService($repository);
 
-        return $service->handle(new CreateUserData($input->name));
+        $result = $service->handle(new CreateUserData($input->name));
+
+        if (!$result instanceof CreateUserResult) {
+            $actual = $result::class;
+            throw new \UnexpectedValueException("Expected result " . CreateUserResult::class . ", got {$actual}.");
+        }
+
+        return $result;
     }
 }
