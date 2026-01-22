@@ -40,24 +40,4 @@ return function (DomainRouter $router): void {
 
         return Response::json($result->items);
     });
-
-    $router->get('/users/faulty/validation', function (Request $request): Response {
-        $orm = $request->attribute('orm');
-        $repository = new UsersCommandRepository($orm);
-        $service = new CreateUserService($repository);
-
-        $service->handle(new CreateUserData(''));
-
-        return Response::json(['ok' => false]);
-    });
-
-    $router->get('/users/faulty/dto', function (Request $request): Response {
-        $orm = $request->attribute('orm');
-        $repository = new UsersCommandRepository($orm);
-        $service = new CreateUserService($repository);
-
-        $service->handle(new readonly class implements CommandDataDto {});
-
-        return Response::json(['ok' => false]);
-    });
 };
