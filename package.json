@@ -1,0 +1,14 @@
+{
+  "name": "lilly",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TypeScript tooling for the Lilly repo (sources in assets/ts, output in public/assets).",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "watch": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

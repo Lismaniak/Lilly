@@ -12,6 +12,9 @@
 # Composer
 /vendor/
 
+# Node
+/node_modules/
+
 # Logs
 *.log
 
@@ -30,3 +33,5 @@ coverage/
 /var/*
 !/var/.gitkeep
 
+# Compiled assets
+/public/assets/
