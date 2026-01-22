@@ -43,14 +43,14 @@ APP_DEBUG=1
 DB_CONNECTION=mysql
 DB_DATABASE=lilly
 DB_SANDBOX_DATABASE=lilly_sandbox
-DB_SANDBOX_HOST=127.0.0.1
 DB_HOST=mysql
+DB_SANDBOX_HOST=mysql
 DB_PORT=3306
 DB_USERNAME=lilly
 DB_PASSWORD=lilly
 ```
 
-`DB_SANDBOX_HOST` is optional and defaults to `DB_HOST`. Use the same host (for example `mysql` in Docker) unless you need the sandbox on a different server.
+`DB_SANDBOX_HOST` is optional and defaults to `DB_HOST`. Use the same host (for example `mysql` in Docker) unless you need the sandbox on a different server. If you run the CLI directly on your host machine but the app runs in Docker, set `DB_HOST=mysql` and add `DB_CLI_HOST=127.0.0.1` (and optionally `DB_CLI_SANDBOX_HOST=127.0.0.1`) so the CLI can connect locally without breaking the web container.
 
 ### CLI usage
 

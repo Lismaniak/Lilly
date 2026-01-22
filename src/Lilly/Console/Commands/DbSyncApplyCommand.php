@@ -223,11 +223,11 @@ final class DbSyncApplyCommand extends Command
         }
 
         if ($connection === 'mysql') {
-            $host = $this->config->dbHost;
+            $host = $this->env('DB_CLI_HOST') ?: $this->config->dbHost;
             $port = $this->config->dbPort ?? 3306;
             $user = $this->config->dbUsername;
             $pass = $this->config->dbPassword ?? '';
-            $sandboxHost = $this->config->dbSandboxHost ?: $host;
+            $sandboxHost = $this->env('DB_CLI_SANDBOX_HOST') ?: ($this->config->dbSandboxHost ?: $host);
 
             if ($host === null || $host === '') {
                 throw new RuntimeException('DB_HOST is required for mysql');
