@@ -42,6 +42,7 @@ final class MakeDomainCommand extends Command
         $this->mkdir($domainRoot, $output);
 
         $dirs = [
+            'Controllers',
             'Entities',
             'Repositories',
             'Database/Tables',
@@ -67,6 +68,12 @@ final class MakeDomainCommand extends Command
         $this->writeFile(
             $domainRoot . "/Entities/{$domain}.php",
             $this->entityStub($domain, $domainKey),
+            $output
+        );
+
+        $this->writeFile(
+            $domainRoot . "/Controllers/{$domain}Controller.php",
+            $this->controllerStub($domain),
             $output
         );
 
@@ -143,7 +150,9 @@ final class MakeDomainCommand extends Command
 
     private function routesWebStub(string $domain): string
     {
-        return "<?php\ndeclare(strict_types=1);\n\nuse Lilly\\Http\\DomainRouter;\n\nreturn function (DomainRouter \$router): void {\n    // Web routes for {$domain}\n};\n";
+        $domainKey = strtolower($domain);
+
+        return "<?php\ndeclare(strict_types=1);\n\nuse Domains\\{$domain}\\Controllers\\{$domain}Controller;\nuse Lilly\\Http\\DomainRouter;\nuse Lilly\\Http\\Response;\n\nreturn function (DomainRouter \$router): void {\n    \$controller = new {$domain}Controller();\n\n    \$router->get('/{$domainKey}/health', fn (): Response => \$controller->health());\n};\n";
     }
 
     private function routesApiStub(string $domain): string
@@ -176,6 +185,11 @@ final class MakeDomainCommand extends Command
         $table = $domainKey;
 
         return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Entities;\n\nuse Lilly\\Database\\Orm\\Attributes\\Table;\nuse Lilly\\Database\\Orm\\Attributes\\Column;\n\n#[Table('{$table}')]\nfinal class {$domain}\n{\n    #[Column('id', primary: true, autoIncrement: true)]\n    public ?int \$id = null;\n}\n";
+    }
+
+    private function controllerStub(string $domain): string
+    {
+        return "<?php\ndeclare(strict_types=1);\n\nnamespace Domains\\{$domain}\\Controllers;\n\nuse Lilly\\Http\\Response;\n\nfinal class {$domain}Controller\n{\n    public function health(): Response\n    {\n        return Response::json(['ok' => true]);\n    }\n}\n";
     }
 
     private function tableStub(string $domain, string $domainKey): string
