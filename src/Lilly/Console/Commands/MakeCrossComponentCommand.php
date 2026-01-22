@@ -80,7 +80,6 @@ final class MakeCrossComponentCommand extends Command
             '',
             'Routes',
             'Actions',
-            'View',
             'Assets',
             'Tests',
         ];
@@ -99,7 +98,6 @@ final class MakeCrossComponentCommand extends Command
         $this->write("{$root}/Actions/{$name}.php", $this->actionStub($group, $name), $output);
         $this->write("{$root}/Actions/{$name}Input.php", $this->inputStub($group, $name), $output);
 
-        $this->write("{$root}/View/view.php", "<!-- {$name} view -->\n", $output);
         $this->write("{$root}/Assets/component.ts", "// {$name} hydration\n", $output);
         $this->write("{$root}/Assets/component.css", "/* {$name} styles */\n", $output);
 

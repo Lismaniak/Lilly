@@ -1,3 +1,16 @@
+<?php
+declare(strict_types=1);
+
+namespace Domains\Users\Components\AddUserForm;
+
+final class Component
+{
+    public function render(Props $props): string
+    {
+        $props = $props;
+
+        ob_start();
+        ?>
 <section class="users-add-user-form">
     <header class="users-add-user-form__header">
         <h2>Add User</h2>
@@ -16,3 +29,7 @@
         <button class="users-add-user-form__button" type="submit">Create user</button>
     </form>
 </section>
+<?php
+        return (string) ob_get_clean();
+    }
+}
