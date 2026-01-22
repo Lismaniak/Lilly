@@ -236,7 +236,8 @@ final class DbSyncApplyCommand extends Command
                 throw new RuntimeException('DB_USERNAME is required for mysql');
             }
 
-            if (gethostbyname($sandboxHost) === $sandboxHost) {
+            $sandboxIsIp = filter_var($sandboxHost, FILTER_VALIDATE_IP) !== false;
+            if (!$sandboxIsIp && gethostbyname($sandboxHost) === $sandboxHost) {
                 throw new RuntimeException(
                     "DB_SANDBOX_HOST '{$sandboxHost}' could not be resolved. If you're running the CLI on the host machine, " .
                     "use DB_SANDBOX_HOST=127.0.0.1 (or set DB_HOST to 127.0.0.1). If you're running inside Docker, " .

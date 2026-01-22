@@ -50,6 +50,8 @@ DB_USERNAME=lilly
 DB_PASSWORD=lilly
 ```
 
+`DB_SANDBOX_HOST` is optional and defaults to `DB_HOST`. Use the same host (for example `mysql` in Docker) unless you need the sandbox on a different server.
+
 ### CLI usage
 
 Use the bundled CLI for scaffolding and schema sync:
