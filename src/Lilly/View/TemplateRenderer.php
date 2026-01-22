@@ -27,29 +27,75 @@ final class TemplateRenderer
      */
     private function renderConditionals(string $contents, array $props): string
     {
-        $pattern = '/\{\{\#(if|unless)\s+([a-zA-Z0-9_.-]+)\s*\}\}(.*?)\{\{\/\1\}\}/s';
+        $pattern = '/\{\{\#(if|unless)\s+([a-zA-Z0-9_.-]+)\s*\}\}|\{\{\/(if|unless)\s*\}\}/';
+        $offset = 0;
+        $stack = [
+            [
+                'type' => null,
+                'key' => null,
+                'buffer' => '',
+            ],
+        ];
 
-        while (preg_match($pattern, $contents)) {
-            $contents = preg_replace_callback(
-                $pattern,
-                function (array $matches) use ($props): string {
-                    $type = $matches[1];
-                    $key = $matches[2];
-                    $block = $matches[3];
-                    $value = $this->resolveValue($props, $key);
-                    $truthy = $this->isTruthy($value);
+        while (preg_match($pattern, $contents, $matches, PREG_OFFSET_CAPTURE, $offset)) {
+            $match = $matches[0][0];
+            $matchStart = $matches[0][1];
+            $matchLength = strlen($match);
 
-                    if ($type === 'unless') {
-                        $truthy = !$truthy;
+            $stack[count($stack) - 1]['buffer'] .= substr($contents, $offset, $matchStart - $offset);
+
+            if (!empty($matches[1][0])) {
+                $stack[] = [
+                    'type' => $matches[1][0],
+                    'key' => $matches[2][0],
+                    'buffer' => '',
+                ];
+            } else {
+                $closeType = $matches[3][0];
+
+                if (count($stack) === 1) {
+                    $stack[0]['buffer'] .= $match;
+                } else {
+                    $frame = array_pop($stack);
+
+                    if ($frame['type'] !== $closeType) {
+                        $stack[] = $frame;
+                        $stack[count($stack) - 1]['buffer'] .= $match;
+                    } else {
+                        $value = $this->resolveValue($props, (string) $frame['key']);
+                        $truthy = $this->isTruthy($value);
+
+                        if ($frame['type'] === 'unless') {
+                            $truthy = !$truthy;
+                        }
+
+                        if ($truthy) {
+                            $stack[count($stack) - 1]['buffer'] .= $frame['buffer'];
+                        }
                     }
+                }
+            }
 
-                    return $truthy ? $block : '';
-                },
-                $contents
-            );
+            $offset = $matchStart + $matchLength;
         }
 
-        return $contents;
+        $stack[count($stack) - 1]['buffer'] .= substr($contents, $offset);
+
+        while (count($stack) > 1) {
+            $frame = array_pop($stack);
+            $stack[count($stack) - 1]['buffer'] .= $this->formatOpenTag(
+                (string) $frame['type'],
+                (string) $frame['key']
+            );
+            $stack[count($stack) - 1]['buffer'] .= $frame['buffer'];
+        }
+
+        return $stack[0]['buffer'];
+    }
+
+    private function formatOpenTag(string $type, string $key): string
+    {
+        return sprintf('{{#%s %s}}', $type, $key);
     }
 
     /**
