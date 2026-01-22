@@ -1,6 +1,6 @@
 {
     "domain": "Users",
-    "generated_at": "2026-01-19T21:49:28+00:00",
+    "generated_at": "2026-01-22T11:46:08+00:00",
     "schema_hash": "7adbb62d4385d2480e6fcb31cc2dc993dc0cc66a785663dfe1583c9c65690c3a",
     "tables": {
         "user_mails": {
