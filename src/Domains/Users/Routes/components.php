@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-use Domains\Users\Components\AddUser\Props;
+use Domains\Users\Components\AddUserForm\Props;
 use Domains\Users\Controllers\UsersController;
 use Lilly\Http\DomainRouter;
 use Lilly\Http\Request;
@@ -15,8 +15,8 @@ return function (DomainRouter $router): void {
         return (string) ob_get_clean();
     };
 
-    $viewPath = __DIR__ . '/../Components/AddUser/View/view.php';
-    $actionPath = '/users/components/add-user';
+    $viewPath = __DIR__ . '/../Components/AddUserForm/View/view.php';
+    $actionPath = '/users/components/add-user-form';
 
     $router->get($actionPath, function () use ($render, $viewPath, $actionPath): Response {
         $html = $render($viewPath, new Props(actionPath: $actionPath));

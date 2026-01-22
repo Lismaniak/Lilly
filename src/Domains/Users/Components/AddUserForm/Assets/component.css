@@ -1,4 +1,4 @@
-.users-add-user {
+.users-add-user-form {
     border: 1px solid #e2e8f0;
     border-radius: 12px;
     padding: 1.5rem;
@@ -6,11 +6,11 @@
     background: #fff;
 }
 
-.users-add-user__header {
+.users-add-user-form__header {
     margin-bottom: 1rem;
 }
 
-.users-add-user__notice {
+.users-add-user-form__notice {
     margin-bottom: 1rem;
     padding: 0.75rem 1rem;
     background: #eff6ff;
@@ -18,23 +18,23 @@
     color: #1e3a8a;
 }
 
-.users-add-user__form {
+.users-add-user-form__form {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
 }
 
-.users-add-user__label {
+.users-add-user-form__label {
     font-weight: 600;
 }
 
-.users-add-user__input {
+.users-add-user-form__input {
     padding: 0.5rem 0.75rem;
     border-radius: 8px;
     border: 1px solid #cbd5f5;
 }
 
-.users-add-user__button {
+.users-add-user-form__button {
     align-self: flex-start;
     padding: 0.5rem 1rem;
     border-radius: 999px;

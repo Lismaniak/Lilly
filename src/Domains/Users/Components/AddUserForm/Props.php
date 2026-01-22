@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Domains\Users\Components\AddUser;
+namespace Domains\Users\Components\AddUserForm;
 
 final readonly class Props
 {
